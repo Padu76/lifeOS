@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Middleware per proteggere le route /suggestions
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
   const supabaseToken = req.cookies.get('sb-access-token')
-
-  // Se non c'è token e si sta cercando di accedere a /suggestions → redirect
-  if (!supabaseToken && req.nextUrl.pathname.startsWith('/suggestions')) {
+  if (!supabaseToken && (req.nextUrl.pathname.startsWith('/suggestions') || req.nextUrl.pathname.startsWith('/dashboard'))) {
     const loginUrl = new URL('/sign-in', req.url)
     return NextResponse.redirect(loginUrl)
   }
-
-  return res
+  return NextResponse.next()
 }
-
-export const config = {
-  matcher: ['/suggestions/:path*'],
-}
+export const config = { matcher: ['/suggestions/:path*','/dashboard/:path*'] }
