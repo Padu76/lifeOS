@@ -1,0 +1,37 @@
+[
+  {
+    "key": "breathing-478",
+    "title": "Respirazione 4-7-8",
+    "short_copy": "5 cicli per ridurre lo stress",
+    "duration_sec": 120,
+    "tutorial": {
+      "steps": [
+        {
+          "t": 0,
+          "cue": "Inspira 4"
+        },
+        {
+          "t": 4,
+          "cue": "Trattieni 7"
+        },
+        {
+          "t": 11,
+          "cue": "Espira 8"
+        }
+      ],
+      "cycles": 5
+    }
+  },
+  {
+    "key": "5min-meditation",
+    "title": "Meditazione 5 minuti",
+    "short_copy": "Breve pausa guidata",
+    "duration_sec": 300
+  },
+  {
+    "key": "10min-walk",
+    "title": "Camminata veloce 10 min",
+    "short_copy": "Attiva l\u2019energia senza stress",
+    "duration_sec": 600
+  }
+]

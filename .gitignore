@@ -1,0 +1,22 @@
+# Node
+node_modules
+npm-debug.log*
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Expo / RN
+.expo
+*.iml
+android/
+ios/
+
+# Build
+dist
+.next
+.out
+
+# Env
+.env
+.env.*
+.supabase

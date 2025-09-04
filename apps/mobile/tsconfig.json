@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "jsx": "react-jsx",
+    "moduleResolution": "node",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@lifeos/core/*": [
+        "../../packages/core/*"
+      ],
+      "@lifeos/ui/*": [
+        "../../packages/ui/*"
+      ],
+      "@lifeos/types": [
+        "../../packages/types/index.ts"
+      ]
+    }
+  }
+}

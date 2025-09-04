@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "LifeOS",
+    "slug": "lifeos",
+    "scheme": "lifeos",
+    "orientation": "portrait",
+    "plugins": [],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    }
+  }
+}

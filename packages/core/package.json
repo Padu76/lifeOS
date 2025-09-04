@@ -1,0 +1,7 @@
+{
+  "name": "@lifeos/core",
+  "version": "0.0.1",
+  "main": "index.ts",
+  "private": true,
+  "types": "index.ts"
+}

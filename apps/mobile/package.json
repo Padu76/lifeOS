@@ -1,0 +1,24 @@
+{
+  "name": "@lifeos/mobile",
+  "version": "0.0.1",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "lint": "echo \"(lint stub)\""
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "expo-router": "~3.5.21",
+    "react": "18.2.0",
+    "react-native": "0.74.3",
+    "zustand": "^4.5.2",
+    "@supabase/supabase-js": "^2.46.1",
+    "react-native-svg": "^15.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}
