@@ -16,5 +16,6 @@
         "../../packages/types/index.ts"
       ]
     }
-  }
+  },
+  "extends": "expo/tsconfig.base"
 }
