@@ -1,6 +1,4 @@
-// apps/web/app/layout.tsx
 'use client'
-
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -12,25 +10,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let alive = true
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (alive) setUser(data.user)
-    })
-
+    supabase.auth.getUser().then(({ data }) => { if (alive) setUser(data.user) })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (alive) setUser(session?.user ?? null)
     })
-
-    return () => {
-      alive = false
-      subscription.unsubscribe()
-    }
+    return () => { alive = false; subscription.unsubscribe() }
   }, [])
 
-  const logout = async () => {
-    await supabase.auth.signOut()
-    router.push('/sign-in')
-  }
+  const logout = async () => { await supabase.auth.signOut(); router.push('/sign-in') }
 
   return (
     <html lang="it">
@@ -40,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/">🏠 Home</Link>
             <Link href="/suggestions">💡 Suggestions</Link>
             <Link href="/dashboard">📈 Dashboard</Link>
+            <Link href="/profile">👤 Profilo</Link>
           </nav>
           {user ? (
             <button onClick={logout} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 12px', background: '#f9fafb' }}>
