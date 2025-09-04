@@ -1,115 +1,248 @@
-/**
- * Supabase Edge Function: daily-rollup (env names updated)
- */
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.1";
+// deno-lint-ignore-file no-explicit-any
+// LifeOS – Edge Function: daily-rollup (Europe/Rome) + user_suggestions
+// - Parametro ?day=YYYY-MM-DD (o body { day })
+// - Default: oggi Europe/Rome
+// - Calcola LifeScore e trend, scrive su public.lifescores
+// - (Nuovo) Genera user_suggestions per il giorno in base ai punteggi
+//
+// ENV richieste (come nel tuo repo):
+//   PROJECT_URL         -> https://<PROJECT_REF>.supabase.co
+//   SERVICE_ROLE_KEY    -> service role key
+//
+// Strategia user_suggestions:
+// - Prima rimuove eventuali suggerimenti già presenti per (user_id, day)
+// - Poi inserisce 1-3 suggerimenti mirati in base ai punteggi bassi (steps/sleep/mood).
+// - Se la tabella "suggestions" non è allineata (es. manca colonna category), la function
+//   salta la generazione e continua senza bloccare il rollup.
+//
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type LifeScoreFlags = {
-  low_sleep: boolean;
-  low_activity: boolean;
-  high_stress: boolean;
-  low_mood: boolean;
-};
+const PROJECT_URL = Deno.env.get("PROJECT_URL");
+const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY");
 
-function clamp01(n:number){ return Math.max(0, Math.min(1, n)); }
-function normalizeSteps(steps:number, target=7000){ return clamp01((steps||0)/target); }
-function normalizeSleep(hours:number, ideal=8){ return clamp01((hours||0)/ideal); }
-function normalizeMood(mood:number){ return clamp01(((mood||3)-1)/4); }
-function normalizeStress(stress:number){ return clamp01(((stress||3)-1)/4); }
-
-function computeLifeScore(input: {steps?:number; sleepHours?:number; mood?:number; stress?:number}){
-  const sleep = normalizeSleep(input.sleepHours ?? 0);
-  const steps = normalizeSteps(input.steps ?? 0);
-  const mood  = normalizeMood(input.mood ?? 3);
-  const stress= normalizeStress(input.stress ?? 3);
-
-  const metrics = [sleep, steps, 1 - stress, mood];
-  const baseWeights = [0.35, 0.25, 0.25, 0.15];
-  const minVal = Math.min(...metrics);
-  const idxWorst = metrics.indexOf(minVal);
-  baseWeights[idxWorst] += 0.10;
-
-  const score01 = clamp01(
-    baseWeights[0]*sleep +
-    baseWeights[1]*steps +
-    baseWeights[2]*(1 - stress) +
-    baseWeights[3]*mood
-  );
-
-  const flags: LifeScoreFlags = {
-    low_sleep: sleep < 0.5,
-    low_activity: steps < 0.5,
-    high_stress: stress > 0.6,
-    low_mood: mood < 0.4,
-  };
-
-  return { score: Math.round(score01*100), flags };
+if (!PROJECT_URL || !SERVICE_ROLE_KEY) {
+  console.error("Missing PROJECT_URL or SERVICE_ROLE_KEY");
 }
 
-serve(async (req) => {
-  const url = Deno.env.get("PROJECT_URL")!;
-  const key = Deno.env.get("SERVICE_ROLE_KEY")!;
-  if (!url || !key) {
-    return new Response(JSON.stringify({ ok:false, error: "Missing PROJECT_URL or SERVICE_ROLE_KEY" }), { status: 500 });
+function isValidISODate(d: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(d);
+}
+
+function toISODateEuropeRome(date?: Date): string {
+  const d = date ?? new Date();
+  const local = new Date(d.toLocaleString("en-US", { timeZone: "Europe/Rome" }));
+  const y = local.getFullYear();
+  const m = String(local.getMonth() + 1).padStart(2, "0");
+  const day = String(local.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysISO(iso: string, delta: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m - 1), d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  const ry = dt.getUTCFullYear();
+  const rm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const rd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${ry}-${rm}-${rd}`;
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function json(obj: any, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      "content-type": "application/json",
+      "access-control-allow-origin": "*",
+    },
+  });
+}
+
+async function pickSuggestionsForScores(supabase: any, deficits: string[]) {
+  // Prova a leggere da catalogo "suggestions" se disponibile
+  // Si aspetta che esista almeno: id, category (steps|sleep|mood)
+  try {
+    const { data, error } = await supabase
+      .from("suggestions")
+      .select("id, category");
+    if (error) throw error;
+    if (!data || data.length === 0) return {} as Record<string, any[]>;
+
+    const byCat: Record<string, any[]> = {};
+    for (const row of data) {
+      const cat = (row.category || "").toLowerCase();
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(row);
+    }
+
+    const out: Record<string, any[]> = {};
+    for (const k of deficits) {
+      out[k] = (byCat[k] || []).slice(0, 5); // primi 5 candidati per categoria
+    }
+    return out;
+  } catch (_e) {
+    // Nessun catalogo o schema non compatibile → ritorna vuoto
+    return {} as Record<string, any[]>;
   }
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
+}
 
-  const today = new Date();
-  const y = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-1));
-  const yDateStr = y.toISOString().slice(0,10);
+export default async function handler(req: Request): Promise<Response> {
+  // CORS
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET,POST,OPTIONS",
+        "access-control-allow-headers": "authorization, content-type",
+      },
+    });
+  }
 
-  const { data: rows, error } = await supabase
+  const supabase = createClient(PROJECT_URL!, SERVICE_ROLE_KEY!);
+
+  // Leggi giorno
+  let day: string | undefined;
+  try {
+    if (req.method === "POST" && req.headers.get("content-type")?.includes("application/json")) {
+      const body = await req.json().catch(() => ({}));
+      day = body?.day;
+    } else {
+      const url = new URL(req.url);
+      day = url.searchParams.get("day") ?? undefined;
+    }
+  } catch (_e) {}
+  const dayStr = (day && isValidISODate(day)) ? day : toISODateEuropeRome();
+  const prevDayStr = addDaysISO(dayStr, -1);
+
+  // 1) Carica health_metrics del giorno
+  const { data: rows, error: selErr } = await supabase
     .from("health_metrics")
-    .select("user_id, steps, active_minutes, sleep_hours, mood, stress")
-    .eq("date", yDateStr);
+    .select("user_id, steps, sleep_hours, mood, stress")
+    .eq("date", dayStr);
 
-  if (error) {
-    return new Response(JSON.stringify({ ok:false, stage:"fetch health_metrics", error: error.message }), { status: 500 });
-  }
+  if (selErr) return json({ ok: false, error: selErr.message }, 500);
+  if (!rows || rows.length === 0) return json({ ok: true, processed: 0, day: dayStr });
+
+  const STEPS_GOAL = 8000;
+  const SLEEP_GOAL = 7.5;
+  const W_MOOD = 0.30;
+  const W_SLEEP = 0.30;
+  const W_STEPS = 0.40;
+
+  // Pre-carica catalogo suggerimenti (se esiste) per categorie
+  const catalogByCat = await pickSuggestionsForScores(supabase, ["steps", "sleep", "mood"]);
 
   let processed = 0;
-  for (const r of rows ?? []) {
-    const { score, flags } = computeLifeScore({
-      steps: r.steps ?? 0,
-      sleepHours: r.sleep_hours ?? 0,
-      mood: r.mood ?? 3,
-      stress: r.stress ?? 3
-    });
+  const errors: any[] = [];
 
-    const { error: e1 } = await supabase.from("lifescores").upsert({
-      user_id: r.user_id,
-      date: yDateStr,
-      score,
-      flags
-    }, { onConflict: "user_id,date" });
+  for (const r of rows) {
+    try {
+      const mood = Number(r.mood ?? 3);
+      const sleep = Number(r.sleep_hours ?? 0);
+      const steps = Number(r.steps ?? 0);
 
-    if (e1) continue;
+      const moodScore = Math.round(((clamp(mood, 1, 5) - 1) / 4) * 100);
+      const sleepScore = sleep <= 0
+        ? 0
+        : (sleep <= SLEEP_GOAL
+            ? Math.round(100 * (sleep / SLEEP_GOAL))
+            : Math.round(Math.max(0, 100 - 15 * (sleep - SLEEP_GOAL))));
+      const stepsScore = Math.round(Math.min(1, steps / STEPS_GOAL) * 100);
 
-    const suggestionsToOffer: string[] = [];
-    if (flags.high_stress) suggestionsToOffer.push("breathing-478");
-    if (flags.low_sleep)   suggestionsToOffer.push("5min-meditation");
-    if (flags.low_activity) suggestionsToOffer.push("10min-walk");
-    if (suggestionsToOffer.length === 0) suggestionsToOffer.push("gratitude-note");
+      const lifescore = Math.round(W_MOOD * moodScore + W_SLEEP * sleepScore + W_STEPS * stepsScore);
 
-    for (const key of suggestionsToOffer) {
-      const { data: s, error: es } = await supabase
-        .from("suggestions")
-        .select("id, key")
-        .eq("key", key)
+      // Trend vs ieri
+      let trend: number | null = null;
+      const { data: prev, error: prevErr } = await supabase
+        .from("lifescores")
+        .select("lifescore")
+        .eq("user_id", r.user_id)
+        .eq("date", prevDayStr)
         .maybeSingle();
-      if (es || !s) continue;
+      if (!prevErr && prev && typeof prev.lifescore === "number") {
+        trend = lifescore - prev.lifescore;
+      }
 
-      await supabase.from("user_suggestions").insert({
-        user_id: r.user_id,
-        suggestion_id: s.id,
-        date: yDateStr,
-        reason: flags
-      });
+      // Upsert su lifescores
+      const { error: upErr } = await supabase
+        .from("lifescores")
+        .upsert({
+          user_id: r.user_id,
+          date: dayStr,
+          mood_score: moodScore,
+          sleep_score: sleepScore,
+          steps_score: stepsScore,
+          lifescore,
+          trend,
+        }, { onConflict: "user_id,date" });
+      if (upErr) throw upErr;
+
+      // (Nuovo) Generazione user_suggestions
+      // - Cancella quelle del giorno corrente per evitare duplicati
+      await supabase.from("user_suggestions").delete().eq("user_id", r.user_id).eq("date", dayStr);
+
+      const deficits: string[] = [];
+      if (stepsScore < 60) deficits.push("steps");
+      if (sleepScore < 60) deficits.push("sleep");
+      if (moodScore < 60) deficits.push("mood");
+
+      const inserts: any[] = [];
+      for (const cat of deficits) {
+        const candidates = catalogByCat[cat] || [];
+        if (candidates.length > 0) {
+          // prendi il primo candidato (puoi randomizzare se vuoi)
+          const sug = candidates[Math.floor(Math.random() * candidates.length)];
+          inserts.push({
+            user_id: r.user_id,
+            date: dayStr,
+            suggestion_id: sug.id,
+            completed: false,
+          });
+        } else {
+          // fallback: suggerimenti generati al volo senza catalogo
+          // richiede che user_suggestions abbia colonne (user_id, date, text, category, completed)
+          inserts.push({
+            user_id: r.user_id,
+            date: dayStr,
+            text: fallbackTextFor(cat),
+            category: cat,
+            completed: false,
+          });
+        }
+      }
+
+      if (inserts.length > 0) {
+        // Tenta bulk insert; se alcune colonne non esistono (fallback), ignora l'errore e prosegui
+        const { error: insErr } = await supabase.from("user_suggestions").insert(inserts);
+        if (insErr) {
+          // Non bloccare il rollup se la tabella ha schema diverso
+          console.warn("user_suggestions insert warning:", insErr.message);
+        }
+      }
+
+      processed += 1;
+    } catch (e: any) {
+      errors.push({ user_id: r.user_id, error: String(e?.message ?? e) });
     }
-    processed++;
   }
 
-  return new Response(JSON.stringify({ ok: true, processed, date: yDateStr }), {
-    headers: { "content-type": "application/json" },
-  });
-});
+  return json({ ok: true, processed, day: dayStr, errors });
+}
+
+function fallbackTextFor(cat: string): string {
+  switch (cat) {
+    case "steps":
+      return "Fai una camminata di 10 minuti oggi. Se puoi, spezza la giornata con 2–3 micro‑passeggiate.";
+    case "sleep":
+      return "Stasera spegni gli schermi 60 minuti prima di dormire e prova 4‑7‑8 per 4 cicli.";
+    case "mood":
+      return "Fai 5 respiri lenti naso‑pancia e prendi 10 minuti di luce naturale all’aperto.";
+    default:
+      return "Fai una piccola azione semplice che ti avvicini al benessere oggi.";
+  }
+}
+
+Deno.serve(handler);
