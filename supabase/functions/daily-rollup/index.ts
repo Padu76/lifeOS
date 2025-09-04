@@ -1,9 +1,5 @@
 /**
- * Supabase Edge Function: daily-rollup
- * - Legge le metriche di ieri per ogni utente
- * - Calcola LifeScore
- * - Scrive record su `lifescores`
- * - Genera `user_suggestions` base
+ * Supabase Edge Function: daily-rollup (env names updated)
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.1";
@@ -19,7 +15,7 @@ function clamp01(n:number){ return Math.max(0, Math.min(1, n)); }
 function normalizeSteps(steps:number, target=7000){ return clamp01((steps||0)/target); }
 function normalizeSleep(hours:number, ideal=8){ return clamp01((hours||0)/ideal); }
 function normalizeMood(mood:number){ return clamp01(((mood||3)-1)/4); }
-function normalizeStress(stress:number){ return clamp01(((stress||3)-1)/4); } // alto=1
+function normalizeStress(stress:number){ return clamp01(((stress||3)-1)/4); }
 
 function computeLifeScore(input: {steps?:number; sleepHours?:number; mood?:number; stress?:number}){
   const sleep = normalizeSleep(input.sleepHours ?? 0);
@@ -51,29 +47,27 @@ function computeLifeScore(input: {steps?:number; sleepHours?:number; mood?:numbe
 }
 
 serve(async (req) => {
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // server-only
+  const url = Deno.env.get("PROJECT_URL")!;
+  const key = Deno.env.get("SERVICE_ROLE_KEY")!;
+  if (!url || !key) {
+    return new Response(JSON.stringify({ ok:false, error: "Missing PROJECT_URL or SERVICE_ROLE_KEY" }), { status: 500 });
+  }
   const supabase = createClient(url, key, { auth: { persistSession: false } });
 
-  // Data di ieri (UTC → usa timezone progetto se necessario)
   const today = new Date();
   const y = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-1));
-
   const yDateStr = y.toISOString().slice(0,10);
 
-  // Prendi tutti gli user_id che hanno metriche ieri
   const { data: rows, error } = await supabase
     .from("health_metrics")
     .select("user_id, steps, active_minutes, sleep_hours, mood, stress")
     .eq("date", yDateStr);
 
   if (error) {
-    console.error("fetch health_metrics error", error);
-    return new Response(JSON.stringify({ ok:false, error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ ok:false, stage:"fetch health_metrics", error: error.message }), { status: 500 });
   }
 
-  const results:any[] = [];
-
+  let processed = 0;
   for (const r of rows ?? []) {
     const { score, flags } = computeLifeScore({
       steps: r.steps ?? 0,
@@ -82,7 +76,6 @@ serve(async (req) => {
       stress: r.stress ?? 3
     });
 
-    // Inserisci LifeScore
     const { error: e1 } = await supabase.from("lifescores").upsert({
       user_id: r.user_id,
       date: yDateStr,
@@ -90,21 +83,15 @@ serve(async (req) => {
       flags
     }, { onConflict: "user_id,date" });
 
-    if (e1) {
-      console.error("upsert lifescores error", e1);
-      continue;
-    }
+    if (e1) continue;
 
-    // Genera suggerimenti base
     const suggestionsToOffer: string[] = [];
     if (flags.high_stress) suggestionsToOffer.push("breathing-478");
-    if (flags.low_sleep) suggestionsToOffer.push("5min-meditation");
+    if (flags.low_sleep)   suggestionsToOffer.push("5min-meditation");
     if (flags.low_activity) suggestionsToOffer.push("10min-walk");
-    if (suggestionsToOffer.length === 0) suggestionsToOffer.push("gratitude-note"); // fallback (se presente nel catalogo)
+    if (suggestionsToOffer.length === 0) suggestionsToOffer.push("gratitude-note");
 
-    // mappa key -> suggestion_id
     for (const key of suggestionsToOffer) {
-      // recupera suggestion id by key
       const { data: s, error: es } = await supabase
         .from("suggestions")
         .select("id, key")
@@ -119,11 +106,10 @@ serve(async (req) => {
         reason: flags
       });
     }
-
-    results.push({ user: r.user_id, score, flags });
+    processed++;
   }
 
-  return new Response(JSON.stringify({ ok: true, processed: results.length, date: yDateStr }), {
+  return new Response(JSON.stringify({ ok: true, processed, date: yDateStr }), {
     headers: { "content-type": "application/json" },
   });
 });
