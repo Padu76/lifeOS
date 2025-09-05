@@ -18,13 +18,16 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // se sei già loggato → vai in dashboard
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) router.replace("/dashboard/lifescore");
     })();
   }, [router]);
+
+  function sanitizeOTP(v: string) {
+    return v.replace(/\D/g, "").slice(0, 6); // solo cifre, max 6
+  }
 
   const requestOtp = async () => {
     try {
@@ -34,13 +37,15 @@ export default function SignInPage() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: redirectTo, // <<< forza redirect alla callback
+          emailRedirectTo: redirectTo,
           shouldCreateUser: true,
         },
       });
       if (error) throw error;
       setPhase("otp");
-      setMsg("Email inviata. Inserisci il codice a 6 cifre oppure clicca il link nella mail.");
+      setMsg(
+        "Email inviata. Inserisci il codice a 6 cifre (oppure clicca il link nella mail)."
+      );
     } catch (e: any) {
       setMsg(e.message ?? "Errore nell'invio del codice");
     } finally {
@@ -52,20 +57,28 @@ export default function SignInPage() {
     try {
       setLoading(true);
       setMsg(null);
+      const code = sanitizeOTP(otp);
+      if (code.length !== 6) {
+        setMsg("Inserisci le 6 cifre del codice.");
+        setLoading(false);
+        return;
+      }
       const { data, error } = await supabase.auth.verifyOtp({
         email,
-        token: otp.trim(),
-        type: "email", // verifica OTP email (login/signup)
+        token: code,
+        type: "email",
       });
       if (error) throw error;
       if (!data.session) throw new Error("Sessione non creata");
       router.replace("/dashboard/lifescore");
     } catch (e: any) {
-      setMsg(e.message ?? "OTP non valido");
+      setMsg(e.message ?? "OTP non valido o scaduto");
     } finally {
       setLoading(false);
     }
   };
+
+  const canSend = email.includes("@");
 
   return (
     <main
@@ -73,14 +86,15 @@ export default function SignInPage() {
         maxWidth: 520,
         margin: "60px auto",
         padding: "0 20px",
-        fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif",
+        fontFamily:
+          "system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif",
       }}
     >
-      <h1>Accedi</h1>
+      <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 24 }}>Accedi</h1>
 
       {phase === "email" ? (
         <>
-          <label>Email</label>
+          <label style={{ display: "block", marginBottom: 6 }}>Email</label>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -98,20 +112,33 @@ export default function SignInPage() {
           />
           <button
             onClick={requestOtp}
-            disabled={loading || !email}
-            style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+            disabled={loading || !canSend}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+              background: canSend ? "#111827" : "#f3f4f6",
+              color: canSend ? "#fff" : "#9ca3af",
+              cursor: canSend ? "pointer" : "not-allowed",
+            }}
           >
             {loading ? "Invio…" : "Invia codice / link"}
           </button>
         </>
       ) : (
         <>
-          <label>Codice OTP (6 cifre)</label>
+          <label style={{ display: "block", marginBottom: 6 }}>
+            Codice OTP (6 cifre)
+          </label>
           <input
             value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            onChange={(e) => setOtp(sanitizeOTP(e.target.value))}
+            onPaste={(e) => {
+              e.preventDefault();
+              const text = e.clipboardData.getData("text");
+              setOtp(sanitizeOTP(text));
+            }}
             placeholder="000000"
-            maxLength={6}
             inputMode="numeric"
             style={{
               display: "block",
@@ -120,14 +147,23 @@ export default function SignInPage() {
               borderRadius: 10,
               border: "1px solid #e5e7eb",
               margin: "8px 0 12px",
-              letterSpacing: 4,
               textAlign: "center",
+              fontSize: 20,
+              letterSpacing: 2,
             }}
           />
           <button
             onClick={verifyOtp}
-            disabled={loading || otp.length !== 6}
-            style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+            disabled={loading || sanitizeOTP(otp).length !== 6}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+              background: sanitizeOTP(otp).length === 6 ? "#111827" : "#f3f4f6",
+              color: sanitizeOTP(otp).length === 6 ? "#fff" : "#9ca3af",
+              cursor:
+                sanitizeOTP(otp).length === 6 ? "pointer" : "not-allowed",
+            }}
           >
             {loading ? "Verifico…" : "Verifica e accedi"}
           </button>
@@ -136,15 +172,28 @@ export default function SignInPage() {
             <button
               onClick={requestOtp}
               disabled={loading}
-              style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid #e5e7eb",
+                background: "#fff",
+                cursor: "pointer",
+              }}
             >
               {loading ? "Re-invio…" : "Reinvia email"}
             </button>
           </div>
+
+          <p style={{ marginTop: 12, opacity: 0.8, fontSize: 14 }}>
+            Suggerimento: puoi anche cliccare il link nella mail &mdash; verrai
+            portato su <code>/auth/callback</code> e l'accesso sarà automatico.
+          </p>
         </>
       )}
 
-      {msg && <p style={{ marginTop: 12, opacity: 0.8 }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginTop: 12, color: "#b91c1c", fontSize: 14 }}>{msg}</p>
+      )}
     </main>
   );
 }
