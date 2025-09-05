@@ -1,684 +1,612 @@
-// deno-lint-ignore-file no-explicit-any
-// LifeOS — Advanced Edge Function: daily-rollup with intelligent LifeScore & suggestions
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const PROJECT_URL = Deno.env.get("PROJECT_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY");
-
-if (!PROJECT_URL || !SERVICE_ROLE_KEY) {
-  console.error("Missing PROJECT_URL or SERVICE_ROLE_KEY");
-}
-
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
+// Types
 interface HealthMetrics {
   user_id: string;
   date: string;
-  sleep_hours: number;
-  sleep_quality: number;
   steps: number;
   active_minutes?: number;
+  sleep_hours: number;
+  sleep_quality: number;
   hr_avg?: number;
   mood: number;
   stress: number;
-  energy: number;
+  energy?: number;
   source: string;
 }
 
-interface LifeScore {
+interface UserProfile {
+  user_id: string;
+  baseline_sleep: number;
+  baseline_activity: number;
+  baseline_mood: number;
+  baseline_stress: number;
+  baseline_energy: number;
+  sleep_sensitivity: number;
+  activity_sensitivity: number;
+  mood_sensitivity: number;
+  stress_sensitivity: number;
+  optimal_sleep_min: number;
+  optimal_sleep_max: number;
+  optimal_activity_min: number;
+  optimal_activity_max: number;
+  chronotype: 'morning' | 'evening' | 'neutral';
+  stress_pattern_weekdays: string[];
+  confidence_score: number;
+  data_points_count: number;
+}
+
+interface LifeScoreV2 {
   date: string;
   score: number;
-  breakdown: {
-    sleep_score: number;
-    activity_score: number;
-    mental_score: number;
-  };
-  trend_3d: number;
-  trend_7d: number;
-  flags: LifeScoreFlags;
+  sleep_score: number;
+  activity_score: number;
+  mental_score: number;
+  trend_3d?: number;
+  trend_7d?: number;
+  flags: Record<string, boolean>;
   reasons: string[];
+  confidence_level: number;
+  prediction_3d: number;
+  prediction_7d: number;
+  anomaly_score: number;
+  circadian_factor: number;
+  personal_baseline: number;
+  improvement_suggestions: string[];
 }
 
-interface LifeScoreFlags {
-  low_sleep?: boolean;
-  high_stress?: boolean;
-  low_activity?: boolean;
-  declining_trend?: boolean;
-  improving_trend?: boolean;
-  burnout_risk?: boolean;
-}
+serve(async (req) => {
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
+  }
 
-interface SuggestionTrigger {
-  condition: 'low_sleep' | 'high_stress' | 'low_activity' | 'declining_trend' | 'burnout_risk';
-  priority: number;
-}
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-interface Suggestion {
-  id: string;
-  key: string;
-  title: string;
-  short_copy: string;
-  category: string;
-  duration_sec: number;
-  difficulty: number;
-  triggers: SuggestionTrigger[];
-}
+    const { day } = await req.json();
+    const targetDate = day || new Date().toISOString().slice(0, 10);
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-function isValidISODate(d: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(d);
-}
+    console.log(`Processing daily rollup for ${targetDate}`);
 
-function toISODateEuropeRome(date?: Date): string {
-  const d = date ?? new Date();
-  const local = new Date(d.toLocaleString("en-US", { timeZone: "Europe/Rome" }));
-  const y = local.getFullYear();
-  const m = String(local.getMonth() + 1).padStart(2, "0");
-  const day = String(local.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+    // Get all users with health metrics for the target date
+    const { data: healthMetrics, error: metricsError } = await supabase
+      .from('health_metrics')
+      .select('*')
+      .eq('date', targetDate);
 
-function addDaysISO(iso: string, delta: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, (m - 1), d));
-  dt.setUTCDate(dt.getUTCDate() + delta);
-  const ry = dt.getUTCFullYear();
-  const rm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const rd = String(dt.getUTCDate()).padStart(2, "0");
-  return `${ry}-${rm}-${rd}`;
-}
+    if (metricsError) {
+      throw new Error(`Error fetching health metrics: ${metricsError.message}`);
+    }
 
-function json(obj: any, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "content-type": "application/json",
-      "access-control-allow-origin": "*",
-    },
-  });
-}
+    if (!healthMetrics || healthMetrics.length === 0) {
+      return new Response(JSON.stringify({ 
+        message: 'No health metrics found for target date',
+        processed: 0 
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
 
-// ============================================================================
-// ADVANCED LIFESCORE CALCULATOR
-// ============================================================================
-class LifeScoreCalculator {
-  private static readonly TARGETS = {
-    sleep_hours: 8,
-    steps: 7000,
-    active_minutes: 30,
-  };
+    let processedUsers = 0;
+    let errors: string[] = [];
 
-  private static readonly THRESHOLDS = {
-    low_sleep: 6,
-    high_stress: 4,
-    low_activity: 3000,
-    score_decline: 15,
-    burnout_risk_score: 40,
-  };
+    // Process each user
+    for (const metrics of healthMetrics) {
+      try {
+        await processUserLifeScore(supabase, metrics, targetDate);
+        processedUsers++;
+      } catch (error) {
+        console.error(`Error processing user ${metrics.user_id}:`, error);
+        errors.push(`User ${metrics.user_id}: ${error.message}`);
+      }
+    }
 
-  static calculateLifeScore(metrics: HealthMetrics, historicalScores: any[] = []): LifeScore {
-    // Normalize individual metrics to 0-100 scale
-    const sleepScore = this.calculateSleepScore(metrics);
-    const activityScore = this.calculateActivityScore(metrics);
-    const mentalScore = this.calculateMentalScore(metrics);
-
-    // Apply dynamic weighting based on outliers
-    const dynamicWeights = this.calculateDynamicWeights({
-      sleepScore,
-      activityScore,
-      mentalScore
+    return new Response(JSON.stringify({
+      message: `Daily rollup completed for ${targetDate}`,
+      processed: processedUsers,
+      total: healthMetrics.length,
+      errors: errors.length > 0 ? errors : undefined
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200
     });
 
-    // Calculate final weighted score
-    const finalScore = Math.round(
-      sleepScore * dynamicWeights.w_sleep +
-      activityScore * dynamicWeights.w_activity +
-      mentalScore * dynamicWeights.w_mental
-    );
-
-    // Calculate trends
-    const trends = this.calculateTrends(finalScore, historicalScores);
-
-    // Generate flags based on metrics and trends
-    const flags = this.generateFlags(metrics, finalScore, trends);
-
-    // Generate explanatory reasons
-    const reasons = this.generateReasons(metrics, { sleepScore, activityScore, mentalScore }, flags);
-
-    return {
-      date: metrics.date,
-      score: Math.max(0, Math.min(100, finalScore)),
-      breakdown: {
-        sleep_score: sleepScore,
-        activity_score: activityScore,
-        mental_score: mentalScore
-      },
-      trend_3d: trends.trend_3d,
-      trend_7d: trends.trend_7d,
-      flags,
-      reasons
-    };
+  } catch (error) {
+    console.error('Daily rollup error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message 
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
+});
 
-  private static calculateSleepScore(metrics: HealthMetrics): number {
-    const { sleep_hours, sleep_quality } = metrics;
-    
-    // Hours component (0-70 points)
-    const hoursRatio = Math.min(sleep_hours / this.TARGETS.sleep_hours, 1.2);
-    let hoursScore = 70;
-    
-    if (hoursRatio < 0.75) {
-      hoursScore = hoursRatio * 93.33;
-    } else if (hoursRatio > 1.125) {
-      hoursScore = 70 - (hoursRatio - 1.125) * 80;
-    }
-    
-    // Quality component (0-30 points)
-    const qualityScore = ((sleep_quality - 1) / 4) * 30;
-    
-    return Math.max(0, Math.min(100, hoursScore + qualityScore));
-  }
-
-  private static calculateActivityScore(metrics: HealthMetrics): number {
-    const { steps, active_minutes = 0 } = metrics;
-    
-    // Steps component (0-60 points)
-    const stepsRatio = Math.min(steps / this.TARGETS.steps, 1.5);
-    const stepsScore = Math.min(stepsRatio * 60, 60);
-    
-    // Active minutes component (0-40 points)
-    const activeRatio = Math.min(active_minutes / this.TARGETS.active_minutes, 1.5);
-    const activeScore = Math.min(activeRatio * 40, 40);
-    
-    return Math.max(0, Math.min(100, stepsScore + activeScore));
-  }
-
-  private static calculateMentalScore(metrics: HealthMetrics): number {
-    const { mood, stress, energy } = metrics;
-    
-    // Mood: 1-5 -> 0-40 points
-    const moodScore = ((mood - 1) / 4) * 40;
-    
-    // Stress (inverted): 1-5 -> 30-0 points
-    const stressScore = ((5 - stress) / 4) * 30;
-    
-    // Energy: 1-5 -> 0-30 points
-    const energyScore = ((energy - 1) / 4) * 30;
-    
-    return Math.max(0, Math.min(100, moodScore + stressScore + energyScore));
-  }
-
-  private static calculateDynamicWeights(scores: {
-    sleepScore: number;
-    activityScore: number;
-    mentalScore: number;
-  }) {
-    const { sleepScore, activityScore, mentalScore } = scores;
-    const avgScore = (sleepScore + activityScore + mentalScore) / 3;
-    
-    // Base weights
-    let w_sleep = 0.4;
-    let w_activity = 0.3;
-    let w_mental = 0.3;
-    
-    // If one dimension is significantly below average, increase its weight
-    const adjustments = {
-      sleep: sleepScore < avgScore - 20 ? 0.1 : 0,
-      activity: activityScore < avgScore - 20 ? 0.1 : 0,
-      mental: mentalScore < avgScore - 20 ? 0.1 : 0
-    };
-    
-    // Apply adjustments and normalize
-    const totalAdjustment = Object.values(adjustments).reduce((sum, adj) => sum + adj, 0);
-    const remainingWeight = 1 - totalAdjustment;
-    
-    return {
-      w_sleep: (w_sleep * remainingWeight) + adjustments.sleep,
-      w_activity: (w_activity * remainingWeight) + adjustments.activity,
-      w_mental: (w_mental * remainingWeight) + adjustments.mental
-    };
-  }
-
-  private static calculateTrends(currentScore: number, historicalScores: any[]) {
-    const get3DayAvg = () => {
-      const recent = historicalScores.slice(-3);
-      return recent.length > 0 
-        ? recent.reduce((sum: number, s: any) => sum + (s.score || s.lifescore), 0) / recent.length 
-        : currentScore;
-    };
-    
-    const get7DayAvg = () => {
-      const recent = historicalScores.slice(-7);
-      return recent.length > 0 
-        ? recent.reduce((sum: number, s: any) => sum + (s.score || s.lifescore), 0) / recent.length 
-        : currentScore;
-    };
-    
-    return {
-      trend_3d: Math.round(currentScore - get3DayAvg()),
-      trend_7d: Math.round(currentScore - get7DayAvg())
-    };
-  }
-
-  private static generateFlags(
-    metrics: HealthMetrics,
-    score: number,
-    trends: { trend_3d: number; trend_7d: number }
-  ): LifeScoreFlags {
-    const flags: LifeScoreFlags = {};
-    
-    if (metrics.sleep_hours < this.THRESHOLDS.low_sleep) {
-      flags.low_sleep = true;
-    }
-    
-    if (metrics.stress >= this.THRESHOLDS.high_stress) {
-      flags.high_stress = true;
-    }
-    
-    if (metrics.steps < this.THRESHOLDS.low_activity) {
-      flags.low_activity = true;
-    }
-    
-    if (trends.trend_7d <= -this.THRESHOLDS.score_decline) {
-      flags.declining_trend = true;
-    }
-    
-    if (trends.trend_7d >= this.THRESHOLDS.score_decline) {
-      flags.improving_trend = true;
-    }
-    
-    if (score < this.THRESHOLDS.burnout_risk_score && 
-        flags.high_stress && 
-        flags.declining_trend) {
-      flags.burnout_risk = true;
-    }
-    
-    return flags;
-  }
-
-  private static generateReasons(
-    metrics: HealthMetrics,
-    scores: { sleepScore: number; activityScore: number; mentalScore: number },
-    flags: LifeScoreFlags
-  ): string[] {
-    const reasons: string[] = [];
-    
-    // Positive contributors
-    if (scores.sleepScore >= 80) reasons.push("Ottimo riposo notturno");
-    if (scores.activityScore >= 80) reasons.push("Eccellente livello di attività");
-    if (scores.mentalScore >= 80) reasons.push("Stato mentale molto positivo");
-    
-    // Areas for improvement
-    if (flags.low_sleep) reasons.push(`Sonno insufficiente (${metrics.sleep_hours}h)`);
-    if (flags.high_stress) reasons.push("Livello di stress elevato");
-    if (flags.low_activity) reasons.push("Attività fisica limitata");
-    if (flags.declining_trend) reasons.push("Trend in peggioramento");
-    if (flags.improving_trend) reasons.push("Miglioramento costante");
-    if (flags.burnout_risk) reasons.push("⚠️ Segnali di possibile burnout");
-    
-    return reasons;
-  }
+async function processUserLifeScore(supabase: any, metrics: HealthMetrics, targetDate: string) {
+  // 1. Get or create user profile
+  const profile = await getUserProfile(supabase, metrics.user_id);
+  
+  // 2. Get historical data for context
+  const historicalData = await getHistoricalData(supabase, metrics.user_id, 30);
+  
+  // 3. Get previous scores for trend analysis
+  const previousScores = await getPreviousScores(supabase, metrics.user_id, 14);
+  
+  // 4. Calculate LifeScore V2
+  const lifeScore = calculateLifeScoreV2(metrics, profile, historicalData, previousScores);
+  
+  // 5. Save LifeScore
+  await saveLifeScore(supabase, metrics.user_id, lifeScore);
+  
+  // 6. Generate and save suggestions
+  await generateSuggestions(supabase, metrics.user_id, lifeScore, profile, targetDate);
+  
+  // 7. Update user profile if needed
+  await updateUserProfileIfNeeded(supabase, metrics.user_id, profile, historicalData);
 }
 
-// ============================================================================
-// INTELLIGENT SUGGESTION ENGINE
-// ============================================================================
-class SuggestionEngine {
-  private static readonly COOLDOWN_HOURS: { [key: string]: number } = {
-    'breathing-478': 6,
-    'meditation-5min': 12,
-    'walk-10min': 8,
-    'stretching-basic': 4,
-    'power-nap': 24,
+async function getUserProfile(supabase: any, userId: string): Promise<UserProfile> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data) {
+    // Create default profile
+    const defaultProfile: Partial<UserProfile> = {
+      user_id: userId,
+      baseline_sleep: 7.5,
+      baseline_activity: 7000,
+      baseline_mood: 3.5,
+      baseline_stress: 2.5,
+      baseline_energy: 3.5,
+      sleep_sensitivity: 0.5,
+      activity_sensitivity: 0.5,
+      mood_sensitivity: 0.5,
+      stress_sensitivity: 0.5,
+      optimal_sleep_min: 7.0,
+      optimal_sleep_max: 8.5,
+      optimal_activity_min: 6000,
+      optimal_activity_max: 10000,
+      chronotype: 'neutral',
+      stress_pattern_weekdays: [],
+      confidence_score: 0.0,
+      data_points_count: 0
+    };
+
+    const { data: newProfile } = await supabase
+      .from('user_profiles')
+      .insert(defaultProfile)
+      .select()
+      .single();
+
+    return newProfile || defaultProfile as UserProfile;
+  }
+
+  return data;
+}
+
+async function getHistoricalData(supabase: any, userId: string, days: number) {
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - days);
+  
+  const { data } = await supabase
+    .from('health_metrics')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('date', fromDate.toISOString().slice(0, 10))
+    .order('date', { ascending: true });
+
+  return data || [];
+}
+
+async function getPreviousScores(supabase: any, userId: string, days: number) {
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - days);
+  
+  const { data } = await supabase
+    .from('lifescores')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('date', fromDate.toISOString().slice(0, 10))
+    .order('date', { ascending: true });
+
+  return data || [];
+}
+
+function calculateLifeScoreV2(
+  metrics: HealthMetrics, 
+  profile: UserProfile, 
+  historicalData: any[], 
+  previousScores: any[]
+): LifeScoreV2 {
+  // 1. Calculate adaptive weights
+  const weights = calculateAdaptiveWeights(profile, historicalData, previousScores);
+  
+  // 2. Normalize metrics to personal baseline
+  const normalizedMetrics = normalizeToPersonalBaseline(metrics, profile);
+  
+  // 3. Calculate component scores
+  const sleepScore = calculateSleepScore(normalizedMetrics, profile);
+  const activityScore = calculateActivityScore(normalizedMetrics, profile);
+  const mentalScore = calculateMentalScore(normalizedMetrics, profile);
+  
+  // 4. Calculate base score
+  const baseScore = Math.round(
+    sleepScore * weights.sleep +
+    activityScore * weights.activity +
+    mentalScore * weights.mental
+  );
+  
+  // 5. Apply circadian adjustment
+  const circadianFactor = calculateCircadianFactor(metrics, profile);
+  const adjustedScore = Math.round(baseScore * circadianFactor);
+  
+  // 6. Calculate confidence
+  const confidence = Math.min(1.0, profile.data_points_count / 30);
+  
+  // 7. Anomaly detection
+  const anomalyScore = detectAnomalies(metrics, historicalData, profile);
+  
+  // 8. Calculate predictions
+  const predictions = calculatePredictions(previousScores);
+  
+  // 9. Calculate trends
+  const trends = calculateTrends(adjustedScore, previousScores);
+  
+  // 10. Generate flags
+  const flags = generateFlags(metrics, anomalyScore, trends, profile);
+  
+  // 11. Generate improvement suggestions
+  const suggestions = generateImprovementSuggestions(normalizedMetrics, flags, profile, trends);
+  
+  // 12. Generate reasons
+  const reasons = generateReasons(normalizedMetrics, flags, suggestions);
+
+  return {
+    date: metrics.date,
+    score: Math.max(0, Math.min(100, adjustedScore)),
+    sleep_score: sleepScore,
+    activity_score: activityScore,
+    mental_score: mentalScore,
+    trend_3d: trends.trend_3d,
+    trend_7d: trends.trend_7d,
+    flags,
+    reasons,
+    confidence_level: confidence,
+    prediction_3d: predictions.prediction_3d,
+    prediction_7d: predictions.prediction_7d,
+    anomaly_score: anomalyScore,
+    circadian_factor: circadianFactor,
+    personal_baseline: Math.round((profile.baseline_mood / 5) * 100),
+    improvement_suggestions: suggestions
+  };
+}
+
+function calculateAdaptiveWeights(profile: UserProfile, historicalData: any[], previousScores: any[]) {
+  if (historicalData.length < 7) {
+    return { sleep: 0.35, activity: 0.30, mental: 0.35 };
+  }
+
+  // Use sensitivity factors from profile
+  const totalSensitivity = profile.sleep_sensitivity + profile.activity_sensitivity + profile.mood_sensitivity;
+  
+  if (totalSensitivity === 0) {
+    return { sleep: 0.35, activity: 0.30, mental: 0.35 };
+  }
+
+  // Normalize sensitivities to weights
+  const baseWeights = {
+    sleep: profile.sleep_sensitivity / totalSensitivity,
+    activity: profile.activity_sensitivity / totalSensitivity,
+    mental: profile.mood_sensitivity / totalSensitivity
   };
 
-  static async generateSuggestions(
-    lifeScore: LifeScore,
-    userId: string,
-    supabase: any,
-    availableSuggestions: Suggestion[]
-  ): Promise<any[]> {
-    // Get recent suggestions for cooldown check
-    const { data: recentSuggestions } = await supabase
-      .from('user_suggestions')
-      .select('suggestion_key, created_at')
-      .eq('user_id', userId)
-      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+  // Smooth transition for new users
+  const smoothingFactor = Math.min(historicalData.length / 30, 1);
+  const defaultWeights = { sleep: 0.35, activity: 0.30, mental: 0.35 };
 
-    const currentTime = new Date();
-    
-    // Filter out suggestions in cooldown
-    const availableNow = availableSuggestions.filter(suggestion => 
-      this.isAvailable(suggestion, recentSuggestions || [], currentTime)
-    );
+  return {
+    sleep: defaultWeights.sleep * (1 - smoothingFactor) + baseWeights.sleep * smoothingFactor,
+    activity: defaultWeights.activity * (1 - smoothingFactor) + baseWeights.activity * smoothingFactor,
+    mental: defaultWeights.mental * (1 - smoothingFactor) + baseWeights.mental * smoothingFactor
+  };
+}
 
-    // Priority scoring based on flags
-    const scoredSuggestions = availableNow.map(suggestion => ({
-      suggestion,
-      priority: this.calculatePriority(suggestion, lifeScore),
-      reason: this.generateReason(suggestion, lifeScore)
-    }));
+function normalizeToPersonalBaseline(metrics: HealthMetrics, profile: UserProfile): HealthMetrics {
+  return {
+    ...metrics,
+    sleep_hours: Math.max(0, Math.min(1, 
+      (metrics.sleep_hours - profile.optimal_sleep_min) / 
+      (profile.optimal_sleep_max - profile.optimal_sleep_min)
+    )) * metrics.sleep_hours,
+    steps: Math.max(0, Math.min(1,
+      (metrics.steps - profile.optimal_activity_min) /
+      (profile.optimal_activity_max - profile.optimal_activity_min)
+    )) * metrics.steps,
+    mood: metrics.mood / profile.baseline_mood,
+    stress: metrics.stress,
+    energy: (metrics.energy || metrics.mood) / profile.baseline_energy
+  };
+}
 
-    // Sort by priority and take top 3
-    const topSuggestions = scoredSuggestions
-      .filter(item => item.priority > 0)
-      .sort((a, b) => b.priority - a.priority)
-      .slice(0, 3);
+function calculateSleepScore(metrics: HealthMetrics, profile: UserProfile): number {
+  const hoursScore = Math.min(metrics.sleep_hours / 8.0, 1.2) * 70;
+  const qualityScore = ((metrics.sleep_quality - 1) / 4) * 30;
+  return Math.max(0, Math.min(100, hoursScore + qualityScore));
+}
 
-    // Convert to database format
-    return topSuggestions.map(item => ({
+function calculateActivityScore(metrics: HealthMetrics, profile: UserProfile): number {
+  const stepsScore = Math.min(metrics.steps / 7000, 1.5) * 60;
+  const activeScore = Math.min((metrics.active_minutes || 0) / 30, 1.5) * 40;
+  return Math.max(0, Math.min(100, stepsScore + activeScore));
+}
+
+function calculateMentalScore(metrics: HealthMetrics, profile: UserProfile): number {
+  const moodScore = ((metrics.mood - 1) / 4) * 40;
+  const stressScore = ((5 - metrics.stress) / 4) * 30;
+  const energyScore = (((metrics.energy || metrics.mood) - 1) / 4) * 30;
+  return Math.max(0, Math.min(100, moodScore + stressScore + energyScore));
+}
+
+function calculateCircadianFactor(metrics: HealthMetrics, profile: UserProfile): number {
+  const date = new Date(metrics.date);
+  const dayOfWeek = date.getDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  
+  let factor = 1.0;
+  
+  // Weekend boost
+  if (isWeekend) {
+    factor += 0.05;
+  }
+  
+  // Stress pattern penalty
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  if (profile.stress_pattern_weekdays.includes(dayNames[dayOfWeek])) {
+    factor -= 0.1;
+  }
+  
+  return Math.max(0.8, Math.min(1.2, factor));
+}
+
+function detectAnomalies(metrics: HealthMetrics, historicalData: any[], profile: UserProfile): number {
+  if (historicalData.length < 14) return 0;
+
+  const recent = historicalData.slice(-14);
+  
+  // Calculate z-scores
+  const sleepAvg = recent.reduce((sum, d) => sum + d.sleep_hours, 0) / recent.length;
+  const sleepStd = Math.sqrt(recent.reduce((sum, d) => sum + Math.pow(d.sleep_hours - sleepAvg, 2), 0) / recent.length);
+  const sleepZScore = sleepStd === 0 ? 0 : Math.abs((metrics.sleep_hours - sleepAvg) / sleepStd);
+  
+  const stepsAvg = recent.reduce((sum, d) => sum + d.steps, 0) / recent.length;
+  const stepsStd = Math.sqrt(recent.reduce((sum, d) => sum + Math.pow(d.steps - stepsAvg, 2), 0) / recent.length);
+  const stepsZScore = stepsStd === 0 ? 0 : Math.abs((metrics.steps - stepsAvg) / stepsStd);
+  
+  const maxDeviation = Math.max(sleepZScore, stepsZScore);
+  return Math.min(1, maxDeviation / 3); // 3 sigma = max anomaly
+}
+
+function calculatePredictions(previousScores: any[]): { prediction_3d: number; prediction_7d: number } {
+  if (previousScores.length < 7) {
+    const recent = previousScores.slice(-3);
+    const avg = recent.length > 0 ? recent.reduce((sum, s) => sum + s.score, 0) / recent.length : 75;
+    return { prediction_3d: avg, prediction_7d: avg };
+  }
+
+  const recentScores = previousScores.slice(-14).map(s => s.score);
+  const trend = calculateLinearTrend(recentScores);
+  const currentAvg = recentScores.slice(-3).reduce((sum, score) => sum + score, 0) / 3;
+  
+  return {
+    prediction_3d: Math.max(0, Math.min(100, currentAvg + trend * 3)),
+    prediction_7d: Math.max(0, Math.min(100, currentAvg + trend * 7))
+  };
+}
+
+function calculateLinearTrend(values: number[]): number {
+  const n = values.length;
+  const sumX = (n * (n - 1)) / 2;
+  const sumY = values.reduce((a, b) => a + b, 0);
+  const sumXY = values.reduce((sum, y, x) => sum + x * y, 0);
+  const sumX2 = values.reduce((sum, _, x) => sum + x * x, 0);
+  
+  return (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0;
+}
+
+function calculateTrends(currentScore: number, previousScores: any[]): { trend_3d: number; trend_7d: number } {
+  const get3DayAvg = () => {
+    const recent = previousScores.slice(-3);
+    return recent.length > 0 ? recent.reduce((sum, s) => sum + s.score, 0) / recent.length : currentScore;
+  };
+  
+  const get7DayAvg = () => {
+    const recent = previousScores.slice(-7);
+    return recent.length > 0 ? recent.reduce((sum, s) => sum + s.score, 0) / recent.length : currentScore;
+  };
+  
+  return {
+    trend_3d: Math.round(currentScore - get3DayAvg()),
+    trend_7d: Math.round(currentScore - get7DayAvg())
+  };
+}
+
+function generateFlags(metrics: HealthMetrics, anomalyScore: number, trends: any, profile: UserProfile): Record<string, boolean> {
+  const flags: Record<string, boolean> = {};
+  
+  if (metrics.sleep_hours < 6) flags.low_sleep = true;
+  if (metrics.stress >= 4) flags.high_stress = true;
+  if (metrics.steps < 3000) flags.low_activity = true;
+  if (trends.trend_7d <= -15) flags.declining_trend = true;
+  if (trends.trend_7d >= 15) flags.improving_trend = true;
+  if (anomalyScore > 0.7) flags.anomaly_detected = true;
+  
+  // Burnout risk
+  if (flags.low_sleep && flags.high_stress && flags.declining_trend) {
+    flags.burnout_risk = true;
+  }
+  
+  return flags;
+}
+
+function generateImprovementSuggestions(metrics: HealthMetrics, flags: any, profile: UserProfile, trends: any): string[] {
+  const suggestions: string[] = [];
+  
+  if (flags.low_sleep) {
+    const deficit = profile.optimal_sleep_min - metrics.sleep_hours;
+    suggestions.push(`Aumenta il sonno di ${deficit.toFixed(1)} ore per notte`);
+  }
+  
+  if (flags.low_activity) {
+    const deficit = profile.optimal_activity_min - metrics.steps;
+    suggestions.push(`Aggiungi ${Math.round(deficit)} passi (~${Math.round(deficit/100/10)} min)`);
+  }
+  
+  if (flags.high_stress && profile.chronotype === 'morning') {
+    suggestions.push('Respirazione mattutina 4-7-8');
+  } else if (flags.high_stress) {
+    suggestions.push('Meditazione serale 5 minuti');
+  }
+  
+  if (flags.declining_trend) {
+    suggestions.push('Focus su routine costanti');
+  }
+  
+  return suggestions.slice(0, 3);
+}
+
+function generateReasons(metrics: HealthMetrics, flags: any, suggestions: string[]): string[] {
+  const reasons: string[] = [];
+  
+  if (flags.low_sleep) reasons.push(`Sonno insufficiente (${metrics.sleep_hours}h)`);
+  if (flags.high_stress) reasons.push('Livello di stress elevato');
+  if (flags.low_activity) reasons.push('Attività fisica limitata');
+  if (flags.improving_trend) reasons.push('Miglioramento costante');
+  if (flags.declining_trend) reasons.push('Trend in peggioramento');
+  if (flags.burnout_risk) reasons.push('Segnali di possibile burnout');
+  
+  if (reasons.length === 0) reasons.push('Giornata equilibrata');
+  
+  return reasons.slice(0, 3);
+}
+
+async function saveLifeScore(supabase: any, userId: string, lifeScore: LifeScoreV2) {
+  const { error } = await supabase
+    .from('lifescores')
+    .upsert({
       user_id: userId,
       date: lifeScore.date,
-      suggestion_key: item.suggestion.key,
-      suggestion_id: item.suggestion.id,
-      priority: item.priority,
-      reason: item.reason,
-      completed: false
-    }));
-  }
-
-  private static isAvailable(
-    suggestion: Suggestion,
-    recentSuggestions: any[],
-    currentTime: Date
-  ): boolean {
-    const cooldownHours = this.COOLDOWN_HOURS[suggestion.key] || 8;
-    const cooldownMs = cooldownHours * 60 * 60 * 1000;
-
-    const lastUsed = recentSuggestions
-      .filter(s => s.suggestion_key === suggestion.key)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-    if (!lastUsed) return true;
-
-    const timeSinceLastUse = currentTime.getTime() - new Date(lastUsed.created_at).getTime();
-    return timeSinceLastUse >= cooldownMs;
-  }
-
-  private static calculatePriority(suggestion: Suggestion, lifeScore: LifeScore): number {
-    let priority = 0;
-
-    // Base priority from suggestion triggers
-    const matchingTriggers = suggestion.triggers.filter(trigger => {
-      switch (trigger.condition) {
-        case 'low_sleep': return lifeScore.flags.low_sleep;
-        case 'high_stress': return lifeScore.flags.high_stress;
-        case 'low_activity': return lifeScore.flags.low_activity;
-        case 'declining_trend': return lifeScore.flags.declining_trend;
-        case 'burnout_risk': return lifeScore.flags.burnout_risk;
-        default: return false;
-      }
+      score: lifeScore.score,
+      sleep_score: lifeScore.sleep_score,
+      activity_score: lifeScore.activity_score,
+      mental_score: lifeScore.mental_score,
+      trend_3d: lifeScore.trend_3d,
+      trend_7d: lifeScore.trend_7d,
+      flags: lifeScore.flags,
+      reasons: lifeScore.reasons,
+      confidence_level: lifeScore.confidence_level,
+      prediction_3d: lifeScore.prediction_3d,
+      prediction_7d: lifeScore.prediction_7d,
+      anomaly_score: lifeScore.anomaly_score,
+      circadian_factor: lifeScore.circadian_factor,
+      personal_baseline: lifeScore.personal_baseline,
+      improvement_suggestions: lifeScore.improvement_suggestions
+    }, {
+      onConflict: 'user_id,date'
     });
 
-    if (matchingTriggers.length === 0) return 0;
-
-    // Sum base priorities from matching triggers
-    priority = matchingTriggers.reduce((sum, trigger) => sum + trigger.priority, 0);
-
-    // Score-based adjustments
-    if (lifeScore.score < 40) {
-      priority += 3;
-    } else if (lifeScore.score < 60) {
-      priority += 1;
-    }
-
-    // Trend-based adjustments
-    if (lifeScore.trend_7d < -15) {
-      priority += 2;
-    }
-
-    // Time-of-day contextual boosting
-    const hour = new Date().getHours();
-    priority += this.getTimeBasedBoost(suggestion, hour);
-
-    return Math.max(0, priority);
-  }
-
-  private static getTimeBasedBoost(suggestion: Suggestion, hour: number): number {
-    const category = suggestion.category;
-    
-    if (hour >= 6 && hour <= 10 && category === 'movement') return 2;
-    if (hour >= 11 && hour <= 14 && suggestion.key === 'power-nap') return 2;
-    if (hour >= 15 && hour <= 18 && category === 'breathing') return 1;
-    if (hour >= 19 && hour <= 22 && category === 'meditation') return 2;
-    
-    return 0;
-  }
-
-  private static generateReason(suggestion: Suggestion, lifeScore: LifeScore): string {
-    const reasons: string[] = [];
-
-    if (lifeScore.flags.burnout_risk) reasons.push("Segnali di stress elevato rilevati");
-    if (lifeScore.flags.low_sleep) reasons.push("Qualità del sonno da migliorare");
-    if (lifeScore.flags.high_stress) reasons.push("Livello di stress alto");
-    if (lifeScore.flags.low_activity) reasons.push("Attività fisica limitata oggi");
-    if (lifeScore.flags.declining_trend) reasons.push("Trend in peggioramento");
-    if (lifeScore.score < 50) reasons.push("Benessere generale sotto la media");
-
-    return reasons.length > 0 ? reasons.join(" • ") : "Suggerito per mantenere il benessere";
+  if (error) {
+    throw new Error(`Error saving LifeScore: ${error.message}`);
   }
 }
 
-// ============================================================================
-// BUILT-IN SUGGESTIONS CATALOG
-// ============================================================================
-const BUILT_IN_SUGGESTIONS: Suggestion[] = [
-  {
-    id: 'breathing-478-builtin',
-    key: 'breathing-478',
-    title: 'Respirazione 4-7-8',
-    short_copy: 'Tecnica di respirazione per ridurre stress e ansia',
-    category: 'breathing',
-    duration_sec: 120,
-    difficulty: 1,
-    triggers: [
-      { condition: 'high_stress', priority: 8 },
-      { condition: 'burnout_risk', priority: 9 }
-    ]
-  },
-  {
-    id: 'meditation-5min-builtin',
-    key: 'meditation-5min',
-    title: 'Meditazione Mindfulness',
-    short_copy: 'Sessione guidata di 5 minuti',
-    category: 'meditation',
-    duration_sec: 300,
-    difficulty: 2,
-    triggers: [
-      { condition: 'high_stress', priority: 7 },
-      { condition: 'burnout_risk', priority: 8 }
-    ]
-  },
-  {
-    id: 'walk-10min-builtin',
-    key: 'walk-10min',
-    title: 'Camminata Energizzante',
-    short_copy: 'Passeggiata di 10 minuti',
-    category: 'movement',
-    duration_sec: 600,
-    difficulty: 1,
-    triggers: [
-      { condition: 'low_activity', priority: 9 }
-    ]
-  },
-  {
-    id: 'power-nap-builtin',
-    key: 'power-nap',
-    title: 'Power Nap',
-    short_copy: 'Micro-sonno rigenerante di 15 minuti',
-    category: 'rest',
-    duration_sec: 900,
-    difficulty: 2,
-    triggers: [
-      { condition: 'low_sleep', priority: 8 }
-    ]
+async function generateSuggestions(supabase: any, userId: string, lifeScore: LifeScoreV2, profile: UserProfile, date: string) {
+  // Smart suggestion logic based on flags and profile
+  const suggestions: any[] = [];
+  
+  if (lifeScore.flags.high_stress) {
+    suggestions.push({
+      suggestion_key: 'breathing-478',
+      priority: 8,
+      reason: 'Stress elevato rilevato'
+    });
   }
-];
-
-// ============================================================================
-// MAIN HANDLER
-// ============================================================================
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET,POST,OPTIONS",
-        "access-control-allow-headers": "authorization, content-type",
-      },
+  
+  if (lifeScore.flags.low_sleep) {
+    suggestions.push({
+      suggestion_key: 'power-nap',
+      priority: 7,
+      reason: 'Recupero energia dopo sonno insufficiente'
+    });
+  }
+  
+  if (lifeScore.flags.low_activity) {
+    suggestions.push({
+      suggestion_key: 'walk-10min',
+      priority: 6,
+      reason: 'Aumentare attività fisica'
+    });
+  }
+  
+  if (lifeScore.score >= 80) {
+    suggestions.push({
+      suggestion_key: 'meditation-5min',
+      priority: 5,
+      reason: 'Mantenere il benessere ottimale'
     });
   }
 
-  const supabase = createClient(PROJECT_URL!, SERVICE_ROLE_KEY!);
-
-  // Parse day parameter
-  let day: string | undefined;
-  try {
-    if (req.method === "POST" && req.headers.get("content-type")?.includes("application/json")) {
-      const body = await req.json().catch(() => ({}));
-      day = body?.day;
-    } else {
-      const url = new URL(req.url);
-      day = url.searchParams.get("day") ?? undefined;
-    }
-  } catch (_e) {}
-
-  const dayStr = (day && isValidISODate(day)) ? day : toISODateEuropeRome();
-
-  // 1) Get health metrics for the day
-  const { data: rows, error: selErr } = await supabase
-    .from("health_metrics")
-    .select("*")
-    .eq("date", dayStr);
-
-  if (selErr) return json({ ok: false, error: selErr.message }, 500);
-  if (!rows || rows.length === 0) {
-    return json({ ok: true, processed: 0, day: dayStr, message: "No health metrics found" });
-  }
-
-  // 2) Load available suggestions from database (fallback to built-in)
-  let availableSuggestions = BUILT_IN_SUGGESTIONS;
-  try {
-    const { data: dbSuggestions } = await supabase
-      .from("suggestions")
-      .select("*");
-    
-    if (dbSuggestions && dbSuggestions.length > 0) {
-      // Map database suggestions to our format
-      availableSuggestions = dbSuggestions.map((s: any) => ({
-        id: s.id,
-        key: s.key || s.id,
-        title: s.title || 'Unnamed Suggestion',
-        short_copy: s.short_copy || '',
-        category: s.category || 'general',
-        duration_sec: s.duration_sec || 300,
-        difficulty: s.difficulty || 1,
-        triggers: [{ condition: 'high_stress', priority: 5 }] // Default trigger
-      }));
-    }
-  } catch (e) {
-    console.warn("Failed to load suggestions from database, using built-in:", e);
-  }
-
-  let processed = 0;
-  const errors: any[] = [];
-
-  for (const metrics of rows) {
-    try {
-      // Prepare metrics in expected format
-      const healthMetrics: HealthMetrics = {
-        user_id: metrics.user_id,
-        date: metrics.date,
-        sleep_hours: Number(metrics.sleep_hours || 0),
-        sleep_quality: Number(metrics.sleep_quality || 3),
-        steps: Number(metrics.steps || 0),
-        active_minutes: Number(metrics.active_minutes || 0),
-        hr_avg: metrics.hr_avg ? Number(metrics.hr_avg) : undefined,
-        mood: Number(metrics.mood || 3),
-        stress: Number(metrics.stress || 3),
-        energy: Number(metrics.energy || 3),
-        source: metrics.source || 'manual'
-      };
-
-      // Get historical scores for trend calculation
-      const { data: historicalScores } = await supabase
-        .from("lifescores")
-        .select("score, lifescore, date")
-        .eq("user_id", metrics.user_id)
-        .lt("date", dayStr)
-        .order("date", { ascending: false })
-        .limit(7);
-
-      // Calculate advanced LifeScore
-      const lifeScore = LifeScoreCalculator.calculateLifeScore(
-        healthMetrics,
-        historicalScores || []
-      );
-
-      // Save LifeScore to database
-      const { error: lifescoreErr } = await supabase
-        .from("lifescores")
-        .upsert({
-          user_id: metrics.user_id,
-          date: dayStr,
-          score: lifeScore.score,
-          sleep_score: lifeScore.breakdown.sleep_score,
-          activity_score: lifeScore.breakdown.activity_score,
-          mental_score: lifeScore.breakdown.mental_score,
-          trend_3d: lifeScore.trend_3d,
-          trend_7d: lifeScore.trend_7d,
-          flags: lifeScore.flags,
-          reasons: lifeScore.reasons,
-          lifescore: lifeScore.score // Keep for backwards compatibility
-        }, { onConflict: "user_id,date" });
-
-      if (lifescoreErr) throw lifescoreErr;
-
-      // Generate intelligent suggestions
-      const suggestions = await SuggestionEngine.generateSuggestions(
-        lifeScore,
-        metrics.user_id,
-        supabase,
-        availableSuggestions
-      );
-
-      // Clear existing suggestions for the day and insert new ones
-      await supabase
-        .from("user_suggestions")
-        .delete()
-        .eq("user_id", metrics.user_id)
-        .eq("date", dayStr);
-
-      if (suggestions.length > 0) {
-        const { error: suggestionErr } = await supabase
-          .from("user_suggestions")
-          .insert(suggestions);
-        
-        if (suggestionErr) {
-          console.warn(`Suggestion insert warning for user ${metrics.user_id}:`, suggestionErr.message);
-        }
-      }
-
-      processed += 1;
-    } catch (e: any) {
-      errors.push({ 
-        user_id: metrics.user_id, 
-        error: String(e?.message ?? e) 
+  // Save suggestions
+  for (const suggestion of suggestions) {
+    await supabase
+      .from('user_suggestions')
+      .upsert({
+        user_id: userId,
+        date: date,
+        suggestion_key: suggestion.suggestion_key,
+        priority: suggestion.priority,
+        reason: suggestion.reason,
+        completed: false
+      }, {
+        onConflict: 'user_id,date,suggestion_key'
       });
-      console.error(`Error processing user ${metrics.user_id}:`, e);
-    }
   }
-
-  return json({ 
-    ok: true, 
-    processed, 
-    day: dayStr, 
-    errors,
-    message: `Processed ${processed} users with advanced LifeScore algorithm`
-  });
 }
 
-Deno.serve(handler);
+async function updateUserProfileIfNeeded(supabase: any, userId: string, profile: UserProfile, historicalData: any[]) {
+  // Update profile every 7 days or when we have enough new data
+  const daysSinceUpdate = profile.last_learning_date ? 
+    Math.floor((Date.now() - new Date(profile.last_learning_date).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+  
+  if (daysSinceUpdate >= 7 && historicalData.length >= 14) {
+    // Recalculate baselines
+    const recentData = historicalData.slice(-30);
+    
+    const newBaseline = {
+      sleep: recentData.reduce((sum, d) => sum + d.sleep_hours, 0) / recentData.length,
+      activity: recentData.reduce((sum, d) => sum + d.steps, 0) / recentData.length,
+      mood: recentData.reduce((sum, d) => sum + d.mood, 0) / recentData.length,
+      stress: recentData.reduce((sum, d) => sum + d.stress, 0) / recentData.length
+    };
+    
+    await supabase
+      .from('user_profiles')
+      .update({
+        baseline_sleep: newBaseline.sleep,
+        baseline_activity: Math.round(newBaseline.activity),
+        baseline_mood: newBaseline.mood,
+        baseline_stress: newBaseline.stress,
+        data_points_count: recentData.length,
+        last_learning_date: new Date().toISOString().slice(0, 10),
+        confidence_score: Math.min(1.0, recentData.length / 30)
+      })
+      .eq('user_id', userId);
+  }
+}
