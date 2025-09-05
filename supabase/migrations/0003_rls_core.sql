@@ -64,3 +64,4 @@ DROP POLICY IF EXISTS suggestions_select_all ON public.suggestions;
 CREATE POLICY suggestions_select_all
   ON public.suggestions FOR SELECT
   USING (true);
+
