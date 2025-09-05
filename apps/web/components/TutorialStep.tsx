@@ -45,12 +45,11 @@ export default function TutorialStepComponent({
   const [currentBreathPhase, setCurrentBreathPhase] = useState<'inhale' | 'hold' | 'exhale' | null>(null);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Voice synthesis setup
   const speak = (text: string, options: { rate?: number; pitch?: number; volume?: number } = {}) => {
-    if (!voiceActive || !text || !('speechSynthesis' in window)) return;
+    if (!voiceActive || !text || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
@@ -101,16 +100,18 @@ export default function TutorialStepComponent({
       }
       
       // Speak start guidance if available
-      if (voiceActive && step.voice_guidance?.start) {
+      const voiceGuidance = step.voice_guidance;
+      if (voiceActive && voiceGuidance && voiceGuidance.start) {
+        const startText = voiceGuidance.start;
         setTimeout(() => {
-          speak(step.voice_guidance.start);
+          speak(startText);
         }, 2000);
       }
     } else {
       setIsPlaying(false);
       setIsPaused(false);
     }
-  }, [isActive, step.duration_sec, step.instruction, voiceActive, step.voice_guidance]);
+  }, [isActive, step.duration_sec, step.instruction, voiceActive]);
 
   // Timer countdown with voice guidance
   useEffect(() => {
@@ -120,15 +121,17 @@ export default function TutorialStepComponent({
           const newTime = prev - 1;
           
           // Voice guidance during specific moments
-          if (voiceActive && step.voice_guidance?.during) {
+          const voiceGuidance = step.voice_guidance;
+          if (voiceActive && voiceGuidance && voiceGuidance.during) {
             const totalDuration = step.duration_sec || 0;
             const elapsed = totalDuration - newTime;
+            const duringText = voiceGuidance.during;
             
             // Speak guidance at quarter points
             if (elapsed === Math.floor(totalDuration * 0.25) || 
                 elapsed === Math.floor(totalDuration * 0.5) || 
                 elapsed === Math.floor(totalDuration * 0.75)) {
-              speak(step.voice_guidance.during);
+              speak(duringText);
             }
           }
           
@@ -141,8 +144,9 @@ export default function TutorialStepComponent({
             setIsPlaying(false);
             
             // Speak end guidance
-            if (voiceActive && step.voice_guidance?.end) {
-              const endText = step.voice_guidance.end;
+            const voiceGuidanceEnd = step.voice_guidance;
+            if (voiceActive && voiceGuidanceEnd && voiceGuidanceEnd.end) {
+              const endText = voiceGuidanceEnd.end;
               speak(endText);
             }
             
@@ -164,7 +168,7 @@ export default function TutorialStepComponent({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isPlaying, isPaused, timeRemaining, onStepComplete, voiceActive, step.voice_guidance, step.animation_type, step.duration_sec]);
+  }, [isPlaying, isPaused, timeRemaining, onStepComplete, voiceActive, step]);
 
   // Handle breathing phase changes for voice guidance
   const handleBreathPhaseChange = (phase: 'inhale' | 'hold' | 'exhale', timeRemaining: number) => {
@@ -172,7 +176,8 @@ export default function TutorialStepComponent({
       setCurrentBreathPhase(phase);
       
       // Only speak breathing cues if no other audio is specified
-      if (!step.audio_cue && !step.voice_guidance?.during) {
+      const voiceGuidance = step.voice_guidance;
+      if (!step.audio_cue && (!voiceGuidance || !voiceGuidance.during)) {
         const count = Math.ceil(timeRemaining);
         if (count > 0) {
           speakBreathingCue(phase, count);
@@ -188,15 +193,10 @@ export default function TutorialStepComponent({
       setIsPaused(false);
     } else {
       setIsPaused(!isPaused);
-      if (!isPaused) {
-        // Pause voice too
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.pause();
-        }
-      } else {
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.resume();
-        }
+      if (!isPaused && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.pause();
+      } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.resume();
       }
     }
   };
@@ -205,14 +205,14 @@ export default function TutorialStepComponent({
     setIsPlaying(false);
     setIsPaused(false);
     setTimeRemaining(step.duration_sec || 0);
-    if ('speechSynthesis' in window) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
   };
 
   const toggleVoice = () => {
     setVoiceActive(!voiceActive);
-    if (voiceActive && 'speechSynthesis' in window) {
+    if (voiceActive && typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
   };
@@ -220,7 +220,7 @@ export default function TutorialStepComponent({
   const handleSkip = () => {
     setIsPlaying(false);
     setTimeRemaining(0);
-    if ('speechSynthesis' in window) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
     onStepSkip?.();
@@ -271,7 +271,6 @@ export default function TutorialStepComponent({
         return (
           <div className="flex justify-center my-8">
             <div className="relative w-32 h-32">
-              {/* Progress circle */}
               <svg className="transform -rotate-90 w-32 h-32">
                 <circle
                   cx="64"
@@ -296,7 +295,6 @@ export default function TutorialStepComponent({
                 />
               </svg>
               
-              {/* Time display */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="text-2xl font-bold text-gray-800">
                   {formatTime(timeRemaining)}
