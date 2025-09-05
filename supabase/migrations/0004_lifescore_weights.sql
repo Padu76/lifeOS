@@ -1,5 +1,5 @@
--- 0004_lifescore_weights.sql
--- Crea tabella pesi/obiettivi per LifeScore e relative policy RLS
+-- 0004_lifescore_weights.sql (FIXED)
+-- Rimuove "CREATE POLICY IF NOT EXISTS" (non supportato): usa DROP POLICY IF EXISTS -> CREATE POLICY
 
 create table if not exists public.lifescore_weights (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -35,15 +35,18 @@ end$$;
 -- RLS
 alter table public.lifescore_weights enable row level security;
 
-create policy if not exists lifescore_weights_select_own
-  on public.lifescore_weights for select
-  using (auth.uid() = user_id);
+DROP POLICY IF EXISTS lifescore_weights_select_own ON public.lifescore_weights;
+CREATE POLICY lifescore_weights_select_own
+  ON public.lifescore_weights FOR SELECT
+  USING (auth.uid() = user_id);
 
-create policy if not exists lifescore_weights_insert_own
-  on public.lifescore_weights for insert
-  with check (auth.uid() = user_id);
+DROP POLICY IF EXISTS lifescore_weights_insert_own ON public.lifescore_weights;
+CREATE POLICY lifescore_weights_insert_own
+  ON public.lifescore_weights FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
 
-create policy if not exists lifescore_weights_update_own
-  on public.lifescore_weights for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+DROP POLICY IF EXISTS lifescore_weights_update_own ON public.lifescore_weights;
+CREATE POLICY lifescore_weights_update_own
+  ON public.lifescore_weights FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
