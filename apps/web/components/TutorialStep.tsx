@@ -2,17 +2,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import BreathAnimator from './BreathAnimator';
 
+interface VoiceGuidance {
+  start?: string;
+  during?: string;
+  end?: string;
+}
+
 interface TutorialStep {
   step: number;
   instruction: string;
   duration_sec?: number;
   animation_type?: 'breathing_circle' | 'timer' | 'movement' | null;
   audio_cue?: string;
-  voice_guidance?: {
-    start?: string;
-    during?: string;
-    end?: string;
-  };
+  voice_guidance?: VoiceGuidance;
 }
 
 interface TutorialStepProps {
@@ -108,7 +110,7 @@ export default function TutorialStepComponent({
       setIsPlaying(false);
       setIsPaused(false);
     }
-  }, [isActive, step.duration_sec, step.instruction, voiceActive]);
+  }, [isActive, step.duration_sec, step.instruction, voiceActive, step.voice_guidance]);
 
   // Timer countdown with voice guidance
   useEffect(() => {
@@ -161,7 +163,7 @@ export default function TutorialStepComponent({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isPlaying, isPaused, timeRemaining, onStepComplete, voiceActive, step]);
+  }, [isPlaying, isPaused, timeRemaining, onStepComplete, voiceActive, step.voice_guidance, step.animation_type, step.duration_sec]);
 
   // Handle breathing phase changes for voice guidance
   const handleBreathPhaseChange = (phase: 'inhale' | 'hold' | 'exhale', timeRemaining: number) => {
@@ -187,9 +189,13 @@ export default function TutorialStepComponent({
       setIsPaused(!isPaused);
       if (!isPaused) {
         // Pause voice too
-        window.speechSynthesis.pause();
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.pause();
+        }
       } else {
-        window.speechSynthesis.resume();
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.resume();
+        }
       }
     }
   };
@@ -198,12 +204,14 @@ export default function TutorialStepComponent({
     setIsPlaying(false);
     setIsPaused(false);
     setTimeRemaining(step.duration_sec || 0);
-    window.speechSynthesis.cancel();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   };
 
   const toggleVoice = () => {
     setVoiceActive(!voiceActive);
-    if (voiceActive) {
+    if (voiceActive && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
   };
@@ -211,7 +219,9 @@ export default function TutorialStepComponent({
   const handleSkip = () => {
     setIsPlaying(false);
     setTimeRemaining(0);
-    window.speechSynthesis.cancel();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     onStepSkip?.();
   };
 
