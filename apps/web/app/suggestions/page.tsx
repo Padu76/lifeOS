@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import SuggestionCard from '../../components/SuggestionCard';
 import TutorialManager from '../../components/TutorialManager';
 
-// Built-in tutorial data matching our Edge Function
+// Enhanced tutorial data with voice guidance
 const TUTORIAL_DATA: { [key: string]: any } = {
   'breathing-478': {
     title: 'Respirazione 4-7-8',
@@ -18,44 +18,73 @@ const TUTORIAL_DATA: { [key: string]: any } = {
         step: 1,
         instruction: 'Trova una posizione comoda seduto o sdraiato',
         duration_sec: 15,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Benvenuto nella sessione di respirazione 4-7-8. Questa tecnica ti aiuterà a ridurre stress e ansia.',
+          during: 'Scegli una posizione in cui ti senti stabile e rilassato.'
+        }
       },
       {
         step: 2,
         instruction: 'Posiziona la punta della lingua contro i denti superiori',
         duration_sec: 10,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Posiziona delicatamente la punta della lingua dietro i denti superiori.',
+          during: 'Mantieni questa posizione per tutta la pratica.'
+        }
       },
       {
         step: 3,
         instruction: 'Espira completamente attraverso la bocca facendo un suono "whoosh"',
         duration_sec: 8,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Ora espira completamente attraverso la bocca.',
+          during: 'Fai un suono whoosh mentre espiri tutto l\'aria.'
+        }
       },
       {
         step: 4,
-        instruction: 'Chiudi la bocca e inspira silenziosamente dal naso contando fino a 4',
+        instruction: 'Inspira silenziosamente dal naso contando fino a 4',
         duration_sec: 4,
-        animation_type: 'breathing_circle'
+        animation_type: 'breathing_circle',
+        voice_guidance: {
+          start: 'Chiudi la bocca e inspira lentamente dal naso.',
+          during: 'Inspira per quattro secondi.'
+        }
       },
       {
         step: 5,
         instruction: 'Trattieni il respiro contando fino a 7',
         duration_sec: 7,
-        animation_type: 'breathing_circle'
+        animation_type: 'breathing_circle',
+        voice_guidance: {
+          start: 'Ora trattieni il respiro.',
+          during: 'Mantieni l\'aria nei polmoni per sette secondi.'
+        }
       },
       {
         step: 6,
         instruction: 'Espira dalla bocca contando fino a 8 con il suono "whoosh"',
         duration_sec: 8,
-        animation_type: 'breathing_circle'
+        animation_type: 'breathing_circle',
+        voice_guidance: {
+          start: 'Espira lentamente dalla bocca.',
+          during: 'Fai il suono whoosh per otto secondi.'
+        }
       },
       {
         step: 7,
-        instruction: 'Questo completa un ciclo. Ripeti 3-4 volte per il massimo beneficio',
+        instruction: 'Ripeti il ciclo 3-4 volte per il massimo beneficio',
         duration_sec: 68,
         animation_type: 'breathing_circle',
-        audio_cue: 'Inspira 4... trattieni 7... espira 8...'
+        audio_cue: 'Inspira 4... trattieni 7... espira 8...',
+        voice_guidance: {
+          start: 'Ottimo! Ora ripetiamo insieme questo ciclo.',
+          during: 'Continua a seguire il ritmo. Lascia che il respiro ti calmi.',
+          end: 'Perfetto. Senti come il tuo corpo si è rilassato. Porta questa calma con te.'
+        }
       }
     ]
   },
@@ -70,46 +99,86 @@ const TUTORIAL_DATA: { [key: string]: any } = {
         step: 1,
         instruction: 'Trova un posto tranquillo dove non verrai disturbato',
         duration_sec: 15,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Benvenuto in questa sessione di meditazione mindfulness di cinque minuti.',
+          during: 'Scegli uno spazio dove ti senti sicuro e tranquillo.'
+        }
       },
       {
         step: 2,
         instruction: 'Siediti comodamente con la schiena dritta, piedi appoggiati a terra',
         duration_sec: 15,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Trova una posizione seduta comoda.',
+          during: 'La schiena eretta ma non rigida. I piedi ben appoggiati al suolo.'
+        }
       },
       {
         step: 3,
         instruction: 'Chiudi delicatamente gli occhi o abbassa lo sguardo',
         duration_sec: 10,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Ora chiudi dolcemente gli occhi.',
+          during: 'Oppure abbassa lo sguardo verso il basso se preferisci.'
+        }
       },
       {
         step: 4,
         instruction: 'Porta l\'attenzione al tuo respiro naturale, senza modificarlo',
         duration_sec: 60,
         animation_type: 'breathing_circle',
-        audio_cue: 'Respira naturalmente... osserva il flusso dell\'aria che entra ed esce'
+        voice_guidance: {
+          start: 'Porta la tua attenzione al respiro.',
+          during: 'Non cercare di cambiarlo. Osserva semplicemente come fluisce naturalmente.',
+          end: 'Nota come l\'aria entra ed esce dal tuo corpo.'
+        }
       },
       {
         step: 5,
         instruction: 'Quando la mente vaga, gentilmente riporta l\'attenzione al respiro',
         duration_sec: 120,
         animation_type: 'breathing_circle',
-        audio_cue: 'Se i pensieri arrivano, lasciali andare... torna al respiro'
+        voice_guidance: {
+          start: 'È normale che la mente vaghi.',
+          during: 'Quando noti che stai pensando, riporta dolcemente l\'attenzione al respiro. Senza giudizio.',
+          end: 'Ogni volta che torni al respiro, stai rafforzando la tua consapevolezza.'
+        }
       },
       {
         step: 6,
-        instruction: 'Muovi delicatamente dita delle mani e dei piedi',
-        duration_sec: 15,
-        animation_type: null
+        instruction: 'Nota le sensazioni del corpo: tensioni, calore, contatto con la sedia',
+        duration_sec: 45,
+        animation_type: null,
+        voice_guidance: {
+          start: 'Ora espandi la tua consapevolezza al corpo.',
+          during: 'Nota le sensazioni: dove tocchi la sedia, eventuali tensioni, la temperatura.',
+          end: 'Semplicemente osserva, senza bisogno di cambiare nulla.'
+        }
       },
       {
         step: 7,
-        instruction: 'Quando sei pronto, apri lentamente gli occhi',
-        duration_sec: 65,
+        instruction: 'Torna al respiro, lascia che sia il tuo ancoraggio nel presente',
+        duration_sec: 45,
+        animation_type: 'breathing_circle',
+        voice_guidance: {
+          start: 'Torna ancora una volta al respiro.',
+          during: 'Il respiro è sempre qui, nel momento presente. È il tuo ancoraggio.',
+          end: 'Questo momento, questo respiro, è tutto ciò che esiste ora.'
+        }
+      },
+      {
+        step: 8,
+        instruction: 'Muovi delicatamente dita delle mani e dei piedi',
+        duration_sec: 15,
         animation_type: null,
-        audio_cue: 'Porta questa calma con te nel resto della giornata'
+        voice_guidance: {
+          start: 'Iniziamo a tornare gentilmente.',
+          during: 'Muovi lentamente le dita delle mani e dei piedi.',
+          end: 'Porta questa presenza mentale con te nel resto della giornata.'
+        }
       }
     ]
   },
@@ -124,35 +193,55 @@ const TUTORIAL_DATA: { [key: string]: any } = {
         step: 1,
         instruction: 'Indossa scarpe comode e abbigliamento adeguato',
         duration_sec: 30,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Benvenuto alla tua camminata energizzante di dieci minuti.',
+          during: 'Assicurati di indossare scarpe comode e abbigliamento adeguato al tempo.'
+        }
       },
       {
         step: 2,
         instruction: 'Inizia con passi lenti per riscaldare i muscoli',
         duration_sec: 60,
         animation_type: 'movement',
-        audio_cue: 'Inizia dolcemente... senti i piedi che toccano il suolo'
+        voice_guidance: {
+          start: 'Inizia a camminare lentamente.',
+          during: 'Senti i piedi che toccano il suolo. Ogni passo risveglia il tuo corpo.',
+          end: 'I muscoli si stanno riscaldando. Respira naturalmente.'
+        }
       },
       {
         step: 3,
         instruction: 'Aumenta gradualmente il ritmo fino a un passo sostenuto',
         duration_sec: 240,
         animation_type: 'movement',
-        audio_cue: 'Trova il tuo ritmo naturale... respira profondamente'
+        voice_guidance: {
+          start: 'Ora trova il tuo ritmo naturale.',
+          during: 'Accelera gradualmente. Respira profondamente. Senti l\'energia che aumenta.',
+          end: 'Perfetto. Mantieni questo ritmo che ti fa sentire vivo ed energico.'
+        }
       },
       {
         step: 4,
         instruction: 'Concentrati sulla postura: spalle rilassate, sguardo avanti',
         duration_sec: 180,
         animation_type: 'movement',
-        audio_cue: 'Postura eretta... spalle rilassate... sguardo verso l\'orizzonte'
+        voice_guidance: {
+          start: 'Controlla la tua postura.',
+          during: 'Spalle rilassate, schiena dritta. Lo sguardo verso l\'orizzonte. Cammina con fiducia.',
+          end: 'Senti come una buona postura ti dà energia e presenza.'
+        }
       },
       {
         step: 5,
-        instruction: 'Ultimi 2 minuti: rallenta gradualmente il passo',
-        duration_sec: 90,
-        animation_type: 'movement',
-        audio_cue: 'Rallenta dolcemente... senti l\'energia che circola nel corpo'
+        instruction: 'Nota l\'ambiente: colori, suoni, profumi intorno a te',
+        duration_sec: 120,
+        animation_type: null,
+        voice_guidance: {
+          start: 'Ora apri i tuoi sensi all\'ambiente.',
+          during: 'Nota i colori, i suoni, i profumi. Sii presente in questo momento.',
+          end: 'Questa consapevolezza rende ogni camminata un\'esperienza ricca.'
+        }
       }
     ]
   },
@@ -167,46 +256,76 @@ const TUTORIAL_DATA: { [key: string]: any } = {
         step: 1,
         instruction: 'Trova un posto tranquillo e confortevole',
         duration_sec: 30,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Benvenuto alla tua sessione di power nap rigenerante.',
+          during: 'Trova un luogo tranquillo dove puoi rilassarti completamente per quindici minuti.'
+        }
       },
       {
         step: 2,
         instruction: 'Imposta una sveglia per 15 minuti (non di più)',
         duration_sec: 15,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'È importante impostare una sveglia.',
+          during: 'Quindici minuti è la durata perfetta per ricaricarti senza sentirti intontito.'
+        }
       },
       {
         step: 3,
         instruction: 'Sdraiati o siediti comodamente, chiudi gli occhi',
         duration_sec: 30,
-        animation_type: null
+        animation_type: null,
+        voice_guidance: {
+          start: 'Trova la posizione più comoda per te.',
+          during: 'Chiudi dolcemente gli occhi e inizia a lasciare andare le tensioni.',
+          end: 'Permetti al tuo corpo di sprofondare nella superficie su cui riposi.'
+        }
       },
       {
         step: 4,
         instruction: 'Rilassa tutti i muscoli partendo dai piedi',
         duration_sec: 120,
         animation_type: null,
-        audio_cue: 'Rilassa piedi... gambe... tutto il corpo diventa pesante'
+        voice_guidance: {
+          start: 'Iniziamo un rilassamento progressivo.',
+          during: 'Parti dai piedi... le gambe... l\'addome... le spalle... il viso. Ogni muscolo si rilassa.',
+          end: 'Tutto il corpo ora è pesante e rilassato.'
+        }
       },
       {
         step: 5,
         instruction: 'Respira lentamente e profondamente',
         duration_sec: 180,
         animation_type: 'breathing_circle',
-        audio_cue: 'Respiro lento e profondo... lasciati andare'
+        voice_guidance: {
+          start: 'Porta l\'attenzione al respiro.',
+          during: 'Respiri lenti e profondi. Ogni espirazione ti porta più in profondità nel rilassamento.',
+          end: 'Lascia che il respiro ti guidi verso un riposo rigenerante.'
+        }
       },
       {
         step: 6,
         instruction: 'Non forzare il sonno, accetta qualsiasi stato di riposo',
         duration_sec: 510,
         animation_type: null,
-        audio_cue: 'Non importa se non dormi... il riposo è già benefico'
+        voice_guidance: {
+          start: 'Non è necessario dormire profondamente.',
+          during: 'Anche solo riposare la mente è rigenerante. Lasciati andare senza aspettative.',
+          end: 'Il tuo corpo e la tua mente si stanno ricaricando naturalmente.'
+        }
       },
       {
         step: 7,
         instruction: 'Muovi delicatamente mani e piedi prima di alzarti',
         duration_sec: 15,
-        animation_type: 'movement'
+        animation_type: 'movement',
+        voice_guidance: {
+          start: 'È ora di tornare dolcemente.',
+          during: 'Muovi lentamente le dita, stira delicatamente il corpo.',
+          end: 'Ti senti rigenerato e pronto per continuare la giornata con energia rinnovata.'
+        }
       }
     ]
   }
@@ -365,7 +484,7 @@ export default function SuggestionsPage() {
         setTimeout(() => {
           loadSuggestions();
         }, 2000);
-        setMsg('Suggerimenti aggiornati con l\'AI!');
+        setMsg('Suggerimenti aggiornati con l\'AI! I nuovi consigli includono guida vocale personalizzata.');
       } else {
         setMsg('Errore nell\'aggiornamento dei suggerimenti');
       }
@@ -449,7 +568,7 @@ export default function SuggestionsPage() {
       <div className="max-w-4xl mx-auto p-6 min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600">Caricamento suggerimenti...</p>
+          <p className="text-gray-600">Caricamento suggerimenti con guida vocale...</p>
         </div>
       </div>
     );
@@ -478,7 +597,18 @@ export default function SuggestionsPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">I tuoi suggerimenti</h1>
-        <p className="text-gray-600">Consigli personalizzati per migliorare il tuo benessere oggi</p>
+        <p className="text-gray-600">Consigli personalizzati con guida vocale per migliorare il tuo benessere</p>
+        
+        {/* Voice feature highlight */}
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mt-4">
+          <div className="flex items-center space-x-2">
+            <span className="text-2xl">🎤</span>
+            <div>
+              <h3 className="font-semibold text-purple-900">Guida Vocale Attiva</h3>
+              <p className="text-sm text-purple-700">I tutorial includono istruzioni vocali personalizzate per ogni esercizio</p>
+            </div>
+          </div>
+        </div>
         
         {/* Action buttons */}
         <div className="flex gap-3 mt-4">
@@ -516,7 +646,7 @@ export default function SuggestionsPage() {
           <div className="text-6xl mb-4">💡</div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Nessun suggerimento per oggi</h2>
           <p className="text-gray-600 mb-6">
-            Completa un check-in per ricevere consigli personalizzati
+            Completa un check-in per ricevere consigli personalizzati con guida vocale
           </p>
           <Link
             href="/checkin"
