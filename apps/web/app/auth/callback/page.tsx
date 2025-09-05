@@ -20,18 +20,20 @@ export default function AuthCallbackPage() {
 
       // 1) Flow consigliato: token_hash in query
       const token_hash = url.searchParams.get('token_hash')
-      const type = (url.searchParams.get('type') ?? 'email') as any
+      // Usa il type passato dal template; default 'magiclink'
+      const qsType = url.searchParams.get('type') || 'magiclink'
+      const allowed = new Set(['magiclink', 'signup', 'recovery', 'email_change'])
+      const type = (allowed.has(qsType) ? qsType : 'magiclink') as any
+
       if (token_hash) {
-        try {
-          const { error } = await supabase.auth.verifyOtp({ token_hash, type })
-          if (error) console.error('verifyOtp error:', error.message)
-          // pulisci query
+        const { error } = await supabase.auth.verifyOtp({ token_hash, type })
+        if (!error) {
           url.search = ''
           window.history.replaceState({}, '', url.toString())
-          router.replace('/dashboard')
+          router.replace('/dashboard/lifescore')
           return
-        } catch (e) {
-          console.error(e)
+        } else {
+          console.error('verifyOtp error:', error.message)
         }
       }
 
@@ -42,15 +44,14 @@ export default function AuthCallbackPage() {
         const access_token = p.get('access_token') || undefined
         const refresh_token = p.get('refresh_token') || undefined
         if (access_token && refresh_token) {
-          try {
-            const { error } = await supabase.auth.setSession({ access_token, refresh_token })
-            if (error) console.error('setSession error:', error.message)
+          const { error } = await supabase.auth.setSession({ access_token, refresh_token })
+          if (!error) {
             url.hash = ''
             window.history.replaceState({}, '', url.toString())
-            router.replace('/dashboard')
+            router.replace('/dashboard/lifescore')
             return
-          } catch (e) {
-            console.error(e)
+          } else {
+            console.error('setSession error:', error.message)
           }
         }
       }
