@@ -8,6 +8,11 @@ interface TutorialStep {
   duration_sec?: number;
   animation_type?: 'breathing_circle' | 'timer' | 'movement' | null;
   audio_cue?: string;
+  voice_guidance?: {
+    start?: string;
+    during?: string;
+    end?: string;
+  };
 }
 
 interface TutorialStepProps {
@@ -18,6 +23,7 @@ interface TutorialStepProps {
   totalSteps: number;
   currentStepIndex: number;
   breathingPattern?: '4-7-8' | '5-5';
+  voiceEnabled?: boolean;
 }
 
 export default function TutorialStepComponent({
@@ -27,13 +33,56 @@ export default function TutorialStepComponent({
   onStepSkip,
   totalSteps,
   currentStepIndex,
-  breathingPattern = '4-7-8'
+  breathingPattern = '4-7-8',
+  voiceEnabled = true
 }: TutorialStepProps) {
   const [timeRemaining, setTimeRemaining] = useState(step.duration_sec || 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(voiceEnabled);
+  const [currentBreathPhase, setCurrentBreathPhase] = useState<'inhale' | 'hold' | 'exhale' | null>(null);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Voice synthesis setup
+  const speak = (text: string, options: { rate?: number; pitch?: number; volume?: number } = {}) => {
+    if (!voiceActive || !text || !('speechSynthesis' in window)) return;
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = options.rate || 0.8;
+    utterance.pitch = options.pitch || 1.0;
+    utterance.volume = options.volume || 0.8;
+    
+    // Try to use Italian voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const italianVoice = voices.find(voice => 
+      voice.lang.startsWith('it') || voice.name.toLowerCase().includes('italian')
+    );
+    if (italianVoice) {
+      utterance.voice = italianVoice;
+    }
+    
+    utteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Breathing-specific voice guidance
+  const speakBreathingCue = (phase: 'inhale' | 'hold' | 'exhale', count: number) => {
+    if (!voiceActive) return;
+    
+    const cues = {
+      'inhale': `Inspira per ${count}`,
+      'hold': `Trattieni per ${count}`,
+      'exhale': `Espira per ${count}`
+    };
+    
+    speak(cues[phase], { rate: 0.7 });
+  };
 
   // Auto-start when step becomes active
   useEffect(() => {
@@ -41,20 +90,59 @@ export default function TutorialStepComponent({
       setTimeRemaining(step.duration_sec);
       setIsPlaying(true);
       setIsPaused(false);
+      
+      // Speak initial instruction
+      if (voiceActive && step.instruction) {
+        setTimeout(() => {
+          speak(step.instruction);
+        }, 500);
+      }
+      
+      // Speak start guidance if available
+      if (voiceActive && step.voice_guidance?.start) {
+        setTimeout(() => {
+          speak(step.voice_guidance.start);
+        }, 2000);
+      }
     } else {
       setIsPlaying(false);
       setIsPaused(false);
     }
-  }, [isActive, step.duration_sec]);
+  }, [isActive, step.duration_sec, step.instruction, voiceActive]);
 
-  // Timer countdown
+  // Timer countdown with voice guidance
   useEffect(() => {
     if (isPlaying && !isPaused && timeRemaining > 0) {
       intervalRef.current = setInterval(() => {
         setTimeRemaining(prev => {
           const newTime = prev - 1;
+          
+          // Voice guidance during specific moments
+          if (voiceActive && step.voice_guidance?.during) {
+            const totalDuration = step.duration_sec || 0;
+            const elapsed = totalDuration - newTime;
+            
+            // Speak guidance at quarter points
+            if (elapsed === Math.floor(totalDuration * 0.25) || 
+                elapsed === Math.floor(totalDuration * 0.5) || 
+                elapsed === Math.floor(totalDuration * 0.75)) {
+              speak(step.voice_guidance.during);
+            }
+          }
+          
+          // Final countdown for breathing exercises
+          if (step.animation_type === 'breathing_circle' && newTime <= 5 && newTime > 0) {
+            speak(`${newTime}`);
+          }
+          
           if (newTime <= 0) {
             setIsPlaying(false);
+            
+            // Speak end guidance
+            if (voiceActive && step.voice_guidance?.end) {
+              speak(step.voice_guidance.end);
+            }
+            
             onStepComplete();
             return 0;
           }
@@ -73,29 +161,20 @@ export default function TutorialStepComponent({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isPlaying, isPaused, timeRemaining, onStepComplete]);
+  }, [isPlaying, isPaused, timeRemaining, onStepComplete, voiceActive, step]);
 
-  // Text-to-speech for audio cues
-  const speakAudioCue = () => {
-    if (step.audio_cue && 'speechSynthesis' in window) {
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
+  // Handle breathing phase changes for voice guidance
+  const handleBreathPhaseChange = (phase: 'inhale' | 'hold' | 'exhale', timeRemaining: number) => {
+    if (phase !== currentBreathPhase && step.animation_type === 'breathing_circle' && voiceActive) {
+      setCurrentBreathPhase(phase);
       
-      const utterance = new SpeechSynthesisUtterance(step.audio_cue);
-      utterance.rate = 0.8;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.7;
-      
-      // Try to use Italian voice if available
-      const voices = window.speechSynthesis.getVoices();
-      const italianVoice = voices.find(voice => 
-        voice.lang.startsWith('it') || voice.name.toLowerCase().includes('italian')
-      );
-      if (italianVoice) {
-        utterance.voice = italianVoice;
+      // Only speak breathing cues if no other audio is specified
+      if (!step.audio_cue && !step.voice_guidance?.during) {
+        const count = Math.ceil(timeRemaining);
+        if (count > 0) {
+          speakBreathingCue(phase, count);
+        }
       }
-      
-      window.speechSynthesis.speak(utterance);
     }
   };
 
@@ -106,6 +185,12 @@ export default function TutorialStepComponent({
       setIsPaused(false);
     } else {
       setIsPaused(!isPaused);
+      if (!isPaused) {
+        // Pause voice too
+        window.speechSynthesis.pause();
+      } else {
+        window.speechSynthesis.resume();
+      }
     }
   };
 
@@ -113,12 +198,28 @@ export default function TutorialStepComponent({
     setIsPlaying(false);
     setIsPaused(false);
     setTimeRemaining(step.duration_sec || 0);
+    window.speechSynthesis.cancel();
+  };
+
+  const toggleVoice = () => {
+    setVoiceActive(!voiceActive);
+    if (voiceActive) {
+      window.speechSynthesis.cancel();
+    }
   };
 
   const handleSkip = () => {
     setIsPlaying(false);
     setTimeRemaining(0);
+    window.speechSynthesis.cancel();
     onStepSkip?.();
+  };
+
+  // Manual voice trigger for current instruction
+  const speakCurrentInstruction = () => {
+    if (step.instruction) {
+      speak(step.instruction);
+    }
   };
 
   // Format time display
@@ -144,10 +245,11 @@ export default function TutorialStepComponent({
               isActive={isPlaying && !isPaused}
               pattern={breathingPattern}
               size={180}
+              onPhaseChange={handleBreathPhaseChange}
               onCycleComplete={() => {
-                // Optional: trigger audio cue on each breath cycle
-                if (step.audio_cue && isPlaying) {
-                  speakAudioCue();
+                // Optional: trigger voice cue on each breath cycle
+                if (step.audio_cue && isPlaying && voiceActive) {
+                  speak(step.audio_cue);
                 }
               }}
             />
@@ -230,20 +332,33 @@ export default function TutorialStepComponent({
         </div>
       </div>
 
-      {/* Instruction */}
+      {/* Instruction with voice controls */}
       <div className="text-center mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">
           {step.instruction}
         </h3>
         
-        {step.audio_cue && (
+        <div className="flex justify-center space-x-3">
           <button
-            onClick={speakAudioCue}
-            className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+            onClick={speakCurrentInstruction}
+            className="text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center space-x-1"
           >
-            🔊 Ascolta guida vocale
+            <span>🔊</span>
+            <span>Ripeti istruzione</span>
           </button>
-        )}
+          
+          <button
+            onClick={toggleVoice}
+            className={`text-sm transition-colors flex items-center space-x-1 ${
+              voiceActive 
+                ? 'text-green-600 hover:text-green-800' 
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <span>{voiceActive ? '🎤' : '🔇'}</span>
+            <span>{voiceActive ? 'Voce ON' : 'Voce OFF'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Animation */}
@@ -323,6 +438,14 @@ export default function TutorialStepComponent({
               Salta
             </button>
           )}
+        </div>
+      )}
+
+      {/* Voice status indicator */}
+      {voiceActive && isPlaying && (
+        <div className="mt-4 flex items-center justify-center space-x-2 text-sm text-green-600">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <span>Guida vocale attiva</span>
         </div>
       )}
     </div>
