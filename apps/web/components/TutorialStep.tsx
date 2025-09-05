@@ -142,7 +142,8 @@ export default function TutorialStepComponent({
             
             // Speak end guidance
             if (voiceActive && step.voice_guidance?.end) {
-              speak(step.voice_guidance.end);
+              const endText = step.voice_guidance.end;
+              speak(endText);
             }
             
             onStepComplete();
