@@ -360,7 +360,7 @@ export default function SuggestionsPage() {
   const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [currentTutorial, setCurrentTutorial] = useState<any | null>(null);
+  const [currentTutorialKey, setCurrentTutorialKey] = useState<string | null>(null);
   const [triggeringRollup, setTriggeringRollup] = useState(false);
 
   useEffect(() => {
@@ -496,22 +496,15 @@ export default function SuggestionsPage() {
   };
 
   const handleStartTutorial = (suggestionKey: string) => {
-    const tutorialData = TUTORIAL_DATA[suggestionKey];
-    if (tutorialData) {
-      setCurrentTutorial({
-        id: suggestionKey,
-        key: suggestionKey,
-        ...tutorialData
-      });
-    }
+    setCurrentTutorialKey(suggestionKey);
   };
 
   const handleCompleteTutorial = async (timeSpent: number, feedback?: number) => {
-    if (!currentTutorial || !userId) return;
+    if (!currentTutorialKey || !userId) return;
 
     try {
       // Find the suggestion to mark as completed
-      const suggestion = suggestions.find(s => s.suggestion_key === currentTutorial.key);
+      const suggestion = suggestions.find(s => s.suggestion_key === currentTutorialKey);
       
       if (suggestion && suggestion.id < 1000) { // Only update real DB suggestions, not temporary ones
         const { error } = await supabase
@@ -531,13 +524,13 @@ export default function SuggestionsPage() {
       // Update local state
       setSuggestions(prev => 
         prev.map(s => 
-          s.suggestion_key === currentTutorial.key 
+          s.suggestion_key === currentTutorialKey 
             ? { ...s, completed: true }
             : s
         )
       );
 
-      setCurrentTutorial(null);
+      setCurrentTutorialKey(null);
     } catch (error) {
       console.error('Error completing tutorial:', error);
     }
@@ -680,13 +673,13 @@ export default function SuggestionsPage() {
       )}
 
       {/* Tutorial Manager */}
-      {currentTutorial && (
+      {currentTutorialKey && (
         <TutorialManager
-          suggestion={currentTutorial}
-          isOpen={!!currentTutorial}
-          onClose={() => setCurrentTutorial(null)}
+          tutorialKey={currentTutorialKey}
+          isOpen={!!currentTutorialKey}
+          onClose={() => setCurrentTutorialKey(null)}
           onComplete={handleCompleteTutorial}
-          onExit={() => setCurrentTutorial(null)}
+          onExit={() => setCurrentTutorialKey(null)}
         />
       )}
     </div>
