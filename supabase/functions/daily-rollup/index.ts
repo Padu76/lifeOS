@@ -1,20 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-// LifeOS – Edge Function: daily-rollup (Europe/Rome) + user_suggestions
-// - Parametro ?day=YYYY-MM-DD (o body { day })
-// - Default: oggi Europe/Rome
-// - Calcola LifeScore e trend, scrive su public.lifescores
-// - (Nuovo) Genera user_suggestions per il giorno in base ai punteggi
-//
-// ENV richieste (come nel tuo repo):
-//   PROJECT_URL         -> https://<PROJECT_REF>.supabase.co
-//   SERVICE_ROLE_KEY    -> service role key
-//
-// Strategia user_suggestions:
-// - Prima rimuove eventuali suggerimenti già presenti per (user_id, day)
-// - Poi inserisce 1-3 suggerimenti mirati in base ai punteggi bassi (steps/sleep/mood).
-// - Se la tabella "suggestions" non è allineata (es. manca colonna category), la function
-//   salta la generazione e continua senza bloccare il rollup.
-//
+// LifeOS – Edge Function: daily-rollup (Europe/Rome) + user_suggestions + per-user weights/goals
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const PROJECT_URL = Deno.env.get("PROJECT_URL");
@@ -62,8 +47,6 @@ function json(obj: any, status = 200): Response {
 }
 
 async function pickSuggestionsForScores(supabase: any, deficits: string[]) {
-  // Prova a leggere da catalogo "suggestions" se disponibile
-  // Si aspetta che esista almeno: id, category (steps|sleep|mood)
   try {
     const { data, error } = await supabase
       .from("suggestions")
@@ -77,20 +60,15 @@ async function pickSuggestionsForScores(supabase: any, deficits: string[]) {
       if (!byCat[cat]) byCat[cat] = [];
       byCat[cat].push(row);
     }
-
     const out: Record<string, any[]> = {};
-    for (const k of deficits) {
-      out[k] = (byCat[k] || []).slice(0, 5); // primi 5 candidati per categoria
-    }
+    for (const k of deficits) out[k] = (byCat[k] || []).slice(0, 5);
     return out;
   } catch (_e) {
-    // Nessun catalogo o schema non compatibile → ritorna vuoto
     return {} as Record<string, any[]>;
   }
 }
 
 export default async function handler(req: Request): Promise<Response> {
-  // CORS
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
@@ -103,7 +81,6 @@ export default async function handler(req: Request): Promise<Response> {
 
   const supabase = createClient(PROJECT_URL!, SERVICE_ROLE_KEY!);
 
-  // Leggi giorno
   let day: string | undefined;
   try {
     if (req.method === "POST" && req.headers.get("content-type")?.includes("application/json")) {
@@ -117,7 +94,7 @@ export default async function handler(req: Request): Promise<Response> {
   const dayStr = (day && isValidISODate(day)) ? day : toISODateEuropeRome();
   const prevDayStr = addDaysISO(dayStr, -1);
 
-  // 1) Carica health_metrics del giorno
+  // 1) health_metrics del giorno
   const { data: rows, error: selErr } = await supabase
     .from("health_metrics")
     .select("user_id, steps, sleep_hours, mood, stress")
@@ -126,13 +103,22 @@ export default async function handler(req: Request): Promise<Response> {
   if (selErr) return json({ ok: false, error: selErr.message }, 500);
   if (!rows || rows.length === 0) return json({ ok: true, processed: 0, day: dayStr });
 
-  const STEPS_GOAL = 8000;
-  const SLEEP_GOAL = 7.5;
-  const W_MOOD = 0.30;
-  const W_SLEEP = 0.30;
-  const W_STEPS = 0.40;
+  // 2) Pesca pesi/goal per gli utenti (se la tabella esiste)
+  const userIds = [...new Set(rows.map((r: any) => r.user_id))];
+  let weightsMap = new Map<string, any>();
+  try {
+    const { data: wrows } = await supabase
+      .from("lifescore_weights")
+      .select("user_id, w_mood, w_sleep, w_steps, steps_goal, sleep_goal")
+      .in("user_id", userIds);
+    if (wrows && wrows.length > 0) {
+      for (const w of wrows) weightsMap.set(w.user_id, w);
+    }
+  } catch (_e) {
+    // tabella non esiste o schema diverso → usa defaults
+  }
 
-  // Pre-carica catalogo suggerimenti (se esiste) per categorie
+  // 3) preload catalogo suggerimenti
   const catalogByCat = await pickSuggestionsForScores(supabase, ["steps", "sleep", "mood"]);
 
   let processed = 0;
@@ -140,6 +126,29 @@ export default async function handler(req: Request): Promise<Response> {
 
   for (const r of rows) {
     try {
+      const cfg = weightsMap.get(r.user_id) || {};
+      // Defaults
+      let STEPS_GOAL = 8000;
+      let SLEEP_GOAL = 7.5;
+      let W_MOOD = 0.30;
+      let W_SLEEP = 0.30;
+      let W_STEPS = 0.40;
+
+      if (cfg) {
+        STEPS_GOAL = Number(cfg.steps_goal ?? STEPS_GOAL);
+        SLEEP_GOAL = Number(cfg.sleep_goal ?? SLEEP_GOAL);
+        W_MOOD = Number(cfg.w_mood ?? W_MOOD);
+        W_SLEEP = Number(cfg.w_sleep ?? W_SLEEP);
+        W_STEPS = Number(cfg.w_steps ?? W_STEPS);
+        // Normalizza pesi se non sommano a 1
+        const s = W_MOOD + W_SLEEP + W_STEPS;
+        if (s > 0 && Math.abs(s - 1) > 0.001) {
+          W_MOOD = W_MOOD / s;
+          W_SLEEP = W_SLEEP / s;
+          W_STEPS = W_STEPS / s;
+        }
+      }
+
       const mood = Number(r.mood ?? 3);
       const sleep = Number(r.sleep_hours ?? 0);
       const steps = Number(r.steps ?? 0);
@@ -180,8 +189,7 @@ export default async function handler(req: Request): Promise<Response> {
         }, { onConflict: "user_id,date" });
       if (upErr) throw upErr;
 
-      // (Nuovo) Generazione user_suggestions
-      // - Cancella quelle del giorno corrente per evitare duplicati
+      // Suggerimenti del giorno (pulisci e inserisci)
       await supabase.from("user_suggestions").delete().eq("user_id", r.user_id).eq("date", dayStr);
 
       const deficits: string[] = [];
@@ -193,34 +201,15 @@ export default async function handler(req: Request): Promise<Response> {
       for (const cat of deficits) {
         const candidates = catalogByCat[cat] || [];
         if (candidates.length > 0) {
-          // prendi il primo candidato (puoi randomizzare se vuoi)
           const sug = candidates[Math.floor(Math.random() * candidates.length)];
-          inserts.push({
-            user_id: r.user_id,
-            date: dayStr,
-            suggestion_id: sug.id,
-            completed: false,
-          });
+          inserts.push({ user_id: r.user_id, date: dayStr, suggestion_id: sug.id, completed: false });
         } else {
-          // fallback: suggerimenti generati al volo senza catalogo
-          // richiede che user_suggestions abbia colonne (user_id, date, text, category, completed)
-          inserts.push({
-            user_id: r.user_id,
-            date: dayStr,
-            text: fallbackTextFor(cat),
-            category: cat,
-            completed: false,
-          });
+          inserts.push({ user_id: r.user_id, date: dayStr, text: fallbackTextFor(cat), category: cat, completed: false });
         }
       }
-
       if (inserts.length > 0) {
-        // Tenta bulk insert; se alcune colonne non esistono (fallback), ignora l'errore e prosegui
         const { error: insErr } = await supabase.from("user_suggestions").insert(inserts);
-        if (insErr) {
-          // Non bloccare il rollup se la tabella ha schema diverso
-          console.warn("user_suggestions insert warning:", insErr.message);
-        }
+        if (insErr) console.warn("user_suggestions insert warning:", insErr.message);
       }
 
       processed += 1;
@@ -235,13 +224,13 @@ export default async function handler(req: Request): Promise<Response> {
 function fallbackTextFor(cat: string): string {
   switch (cat) {
     case "steps":
-      return "Fai una camminata di 10 minuti oggi. Se puoi, spezza la giornata con 2–3 micro‑passeggiate.";
+      return "Fai una camminata di 10 minuti oggi. Se puoi, spezza con 2–3 micro‑passeggiate.";
     case "sleep":
-      return "Stasera spegni gli schermi 60 minuti prima di dormire e prova 4‑7‑8 per 4 cicli.";
+      return "Spegni gli schermi 60 minuti prima di dormire e fai 4 cicli di 4‑7‑8.";
     case "mood":
-      return "Fai 5 respiri lenti naso‑pancia e prendi 10 minuti di luce naturale all’aperto.";
+      return "Prendi 10 minuti di luce naturale e fai 5 respiri lenti naso‑pancia.";
     default:
-      return "Fai una piccola azione semplice che ti avvicini al benessere oggi.";
+      return "Fai una piccola azione semplice per il tuo benessere oggi.";
   }
 }
 
