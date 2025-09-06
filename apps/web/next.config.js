@@ -15,12 +15,9 @@ const nextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 365, // 1 year
   },
 
-  // Experimental features per performance
+  // Experimental features per performance (FIXED)
   experimental: {
-    optimizeCss: true,
     scrollRestoration: true,
-    legacyBrowsers: false,
-    browsersListForSwc: true,
   },
 
   // Compression e headers
