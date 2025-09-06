@@ -58,17 +58,10 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error in wellness dashboard API:', error);
     
-    // Fallback con struttura corretta
+    // Fallback compatibile con frontend (cerca data.current_life_score.overall)
     return NextResponse.json({
       success: false,
       data: {
-        // Campi diretti per frontend
-        overall: 5,
-        stress: 5,
-        energy: 5,
-        sleep: 5,
-        
-        // Struttura completa
         current_life_score: { stress: 5, energy: 5, sleep: 5, overall: 5 },
         active_streaks: [],
         recent_achievements: [],
