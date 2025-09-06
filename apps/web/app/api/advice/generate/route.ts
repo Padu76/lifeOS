@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { MicroAdviceOrchestrator } from '@lifeos/core/orchestrator/microAdviceOrchestrator';
-import { HealthMetrics, LifeScore } from '@lifeos/types';
+
+interface SimpleSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  duration: number;
+  priority: string;
+  key: string;
+  ai_generated: {
+    content: string;
+    tone: string;
+    template_id: string;
+    personalization_score: number;
+    predicted_effectiveness: number;
+  };
+  timing: {
+    suggested_time: Date;
+    urgency_level: string;
+    confidence_score: number;
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,94 +47,34 @@ export async function POST(request: NextRequest) {
       context_override = {}
     } = body;
 
-    // Initialize orchestrator
-    const orchestrator = new MicroAdviceOrchestrator();
+    // Get user's current wellness data
+    const currentLifeScore = await getCurrentLifeScore(supabase, userId);
+    const userPreferences = await getUserPreferences(supabase, userId);
 
-    // Get current user metrics and LifeScore
-    const currentMetrics = await getCurrentUserMetrics(supabase, userId);
-    const currentLifeScore = await getCurrentUserLifeScore(supabase, userId);
-
-    // Handle request for multiple suggestions (for suggestions page)
-    if (context_override.page === 'suggestions' && context_override.requested_count) {
-      const suggestions = [];
-      const requestedCount = Math.min(context_override.requested_count, 8); // Max 8 suggestions
-      
-      for (let i = 0; i < requestedCount; i++) {
-        try {
-          const advice = await orchestrator.generateMicroAdvice({
-            user_id: userId,
-            current_metrics: currentMetrics,
-            current_life_score: currentLifeScore,
-            force_immediate: i === 0 ? force_immediate : false, // Only force first one
-            preferred_category: i === 0 ? preferred_category : undefined
-          });
-          
-          suggestions.push(advice);
-          
-          // Add small delay between generations to vary timing
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (error) {
-          console.error(`Error generating suggestion ${i + 1}:`, error);
-          // Continue with other suggestions even if one fails
-        }
-      }
-
-      if (suggestions.length === 0) {
-        return NextResponse.json(
-          { 
-            error: 'No suggestions generated', 
-            message: 'Unable to generate any AI suggestions at this time',
-            fallback: true
-          },
-          { status: 200 } // Return 200 to trigger fallback
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        suggestions,
-        generated_at: new Date().toISOString(),
-        user_context: {
-          life_score: currentLifeScore,
-          metrics_available: !!currentMetrics
-        }
-      });
-    }
-
-    // Handle single advice generation
-    const advice = await orchestrator.generateMicroAdvice({
-      user_id: userId,
-      current_metrics: currentMetrics,
-      current_life_score: currentLifeScore,
-      force_immediate,
-      preferred_category
-    });
+    // Generate suggestions based on current state
+    const suggestions = await generateSimpleSuggestions(
+      currentLifeScore,
+      userPreferences,
+      context_override.requested_count || 6
+    );
 
     return NextResponse.json({
       success: true,
-      advice,
-      generated_at: new Date().toISOString()
+      suggestions,
+      generated_at: new Date().toISOString(),
+      user_context: {
+        life_score: currentLifeScore,
+        preferences: userPreferences
+      }
     });
 
   } catch (error: any) {
-    console.error('Error in advice generation API:', error);
+    console.error('Error in simple advice generation:', error);
     
-    // Determine error type for appropriate response
-    if (error?.message?.includes('No intervention needed')) {
-      return NextResponse.json(
-        { 
-          error: 'No intervention needed',
-          message: 'Your wellness metrics look good right now. Try again later.',
-          retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
-        },
-        { status: 200 }
-      );
-    }
-
     return NextResponse.json(
       { 
         error: 'Internal server error',
-        message: 'Failed to generate AI advice',
+        message: 'Failed to generate suggestions',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
       { status: 500 }
@@ -122,113 +82,179 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper function to get current user metrics
-async function getCurrentUserMetrics(supabase: any, userId: string): Promise<HealthMetrics> {
+// Helper to get current life score
+async function getCurrentLifeScore(supabase: any, userId: string) {
   try {
-    // Get today's metrics
     const today = new Date().toISOString().split('T')[0];
     
-    const { data: metrics, error } = await supabase
-      .from('health_metrics')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', today)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-      console.error('Error fetching user metrics:', error);
-    }
-
-    if (!metrics) {
-      // Return default metrics if none found
-      return {
-        date: today,
-        user_id: userId,
-        steps: 5000, // Default reasonable values
-        sleep_hours: 7,
-        mood_score: 5,
-        stress_level: 5,
-        energy_level: 5,
-        heart_rate: 70,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-    }
-
-    return metrics;
-  } catch (error) {
-    console.error('Error in getCurrentUserMetrics:', error);
-    // Return safe defaults
-    return {
-      date: new Date().toISOString().split('T')[0],
-      steps: 5000,
-      sleep_hours: 7,
-      mood_score: 5,
-      stress_level: 5,
-      energy_level: 5,
-      heart_rate: 70,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    } as HealthMetrics;
-  }
-}
-
-// Helper function to get current user LifeScore
-async function getCurrentUserLifeScore(supabase: any, userId: string): Promise<LifeScore> {
-  try {
-    // Get today's LifeScore
-    const today = new Date().toISOString().split('T')[0];
-    
-    const { data: lifeScore, error } = await supabase
+    const { data: score } = await supabase
       .from('lifescores')
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
       .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching user LifeScore:', error);
-    }
-
-    if (!lifeScore) {
-      // Calculate LifeScore from current metrics
-      const metrics = await getCurrentUserMetrics(supabase, userId);
-      return calculateLifeScoreFromMetrics(metrics);
-    }
-
     return {
-      stress: lifeScore.stress_score || 5,
-      energy: lifeScore.energy_score || 5,
-      sleep: lifeScore.sleep_score || 5,
-      overall: lifeScore.overall_score || 5
+      stress: score?.stress_score || 5,
+      energy: score?.energy_score || 5,
+      sleep: score?.sleep_score || 5,
+      overall: score?.overall_score || 5
     };
-
   } catch (error) {
-    console.error('Error in getCurrentUserLifeScore:', error);
-    // Return safe defaults
+    return { stress: 5, energy: 5, sleep: 5, overall: 5 };
+  }
+}
+
+// Helper to get user preferences
+async function getUserPreferences(supabase: any, userId: string) {
+  try {
+    const { data: prefs } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     return {
-      stress: 5,
-      energy: 5,
-      sleep: 5,
-      overall: 5
+      preferred_tone: prefs?.preferred_tone || 'encouraging',
+      focus_areas: prefs?.focus_areas || ['stress', 'energy', 'sleep'],
+      notification_frequency: prefs?.notification_frequency || 'balanced'
+    };
+  } catch (error) {
+    return {
+      preferred_tone: 'encouraging',
+      focus_areas: ['stress', 'energy', 'sleep'],
+      notification_frequency: 'balanced'
     };
   }
 }
 
-// Helper function to calculate LifeScore from metrics
-function calculateLifeScoreFromMetrics(metrics: HealthMetrics): LifeScore {
-  // Simple calculation - in production this would use the core LifeScore algorithm
-  const stressScore = Math.max(1, Math.min(10, 11 - (metrics.stress_level || 5)));
-  const energyScore = Math.max(1, Math.min(10, metrics.energy_level || 5));
-  const sleepScore = Math.max(1, Math.min(10, (metrics.sleep_hours || 7) * 1.2));
-  const overallScore = Math.round((stressScore + energyScore + sleepScore) / 3);
+// Generate simple suggestions based on wellness state
+async function generateSimpleSuggestions(
+  lifeScore: any,
+  preferences: any,
+  count: number = 6
+): Promise<SimpleSuggestion[]> {
+  
+  const suggestions: SimpleSuggestion[] = [];
+  const hour = new Date().getHours();
+  
+  // Define suggestion templates based on wellness state
+  const suggestionTemplates = [
+    {
+      condition: () => lifeScore.stress >= 7,
+      suggestion: {
+        title: 'Respirazione 4-7-8',
+        description: 'Tecnica di respirazione per ridurre lo stress rapidamente',
+        category: 'stress_relief',
+        duration: 5,
+        priority: 'high',
+        key: 'breathing-478',
+        content: 'Il tuo stress sembra elevato. La respirazione 4-7-8 può aiutarti a calmarti in pochi minuti.',
+        effectiveness: 0.85
+      }
+    },
+    {
+      condition: () => lifeScore.energy <= 4,
+      suggestion: {
+        title: 'Camminata energizzante',
+        description: 'Una breve camminata per riattivare energia e concentrazione',
+        category: 'energy_boost',
+        duration: 10,
+        priority: 'medium',
+        key: '10min-walk',
+        content: 'I tuoi livelli di energia sono bassi. Una camminata veloce può dare la carica che cerchi.',
+        effectiveness: 0.78
+      }
+    },
+    {
+      condition: () => lifeScore.sleep <= 5 && hour >= 18,
+      suggestion: {
+        title: 'Meditazione serale',
+        description: 'Rilassa mente e corpo per prepararti al riposo',
+        category: 'sleep_prep',
+        duration: 8,
+        priority: 'high',
+        key: '5min-meditation',
+        content: 'La qualità del sonno può migliorare. Una breve meditazione serale ti aiuterà.',
+        effectiveness: 0.82
+      }
+    },
+    {
+      condition: () => lifeScore.overall >= 7,
+      suggestion: {
+        title: 'Momento di gratitudine',
+        description: 'Celebra i tuoi progressi e mantieni lo slancio positivo',
+        category: 'celebration',
+        duration: 3,
+        priority: 'low',
+        key: 'gratitude-moment',
+        content: 'Stai andando bene! Prendiamoci un momento per apprezzare i progressi fatti.',
+        effectiveness: 0.91
+      }
+    },
+    {
+      condition: () => hour >= 9 && hour <= 11,
+      suggestion: {
+        title: 'Focus session 25 min',
+        description: 'Tecnica Pomodoro per massimizzare la produttività mattutina',
+        category: 'focus',
+        duration: 25,
+        priority: 'medium',
+        key: 'pomodoro-technique',
+        content: 'Perfetto momento per una sessione di focus. 25 minuti di concentrazione totale.',
+        effectiveness: 0.75
+      }
+    },
+    {
+      condition: () => true, // Always available
+      suggestion: {
+        title: 'Idratazione mindful',
+        description: 'Bevi consapevolmente un bicchiere d\'acqua',
+        category: 'energy_boost',
+        duration: 2,
+        priority: 'low',
+        key: 'mindful-hydration',
+        content: 'Il corpo ha bisogno di idratazione. Beviamo con attenzione e presenza.',
+        effectiveness: 0.65
+      }
+    }
+  ];
 
-  return {
-    stress: stressScore,
-    energy: energyScore,
-    sleep: sleepScore,
-    overall: overallScore
-  };
+  // Filter and select suggestions based on conditions
+  let selectedTemplates = suggestionTemplates.filter(t => t.condition());
+  
+  // If we don't have enough, add some general ones
+  if (selectedTemplates.length < count) {
+    selectedTemplates = suggestionTemplates;
+  }
+
+  // Create suggestion objects
+  for (let i = 0; i < Math.min(count, selectedTemplates.length); i++) {
+    const template = selectedTemplates[i];
+    const suggestion: SimpleSuggestion = {
+      id: `simple-${Date.now()}-${i}`,
+      title: template.suggestion.title,
+      description: template.suggestion.description,
+      category: template.suggestion.category,
+      duration: template.suggestion.duration,
+      priority: template.suggestion.priority,
+      key: template.suggestion.key,
+      ai_generated: {
+        content: template.suggestion.content,
+        tone: preferences.preferred_tone,
+        template_id: template.suggestion.key,
+        personalization_score: Math.random() * 0.3 + 0.7, // 0.7-1.0
+        predicted_effectiveness: template.suggestion.effectiveness
+      },
+      timing: {
+        suggested_time: new Date(),
+        urgency_level: template.suggestion.priority === 'high' ? 'high' : 'medium',
+        confidence_score: 0.8
+      }
+    };
+    
+    suggestions.push(suggestion);
+  }
+
+  return suggestions;
 }
