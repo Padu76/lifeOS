@@ -1,121 +1,180 @@
 // =====================================================
-// LifeOS Mobile Components - Complete Index Export
-// File: index.ts
+// LifeOS - Main Index Export
+// File: packages/index.ts
 // =====================================================
 
 // =====================================================
-// MAIN SCREEN COMPONENTS
+// CORE SYSTEM EXPORTS
 // =====================================================
 
-// Dashboard Screen Components
-export { DashboardScreen } from '../screens/DashboardScreen';
-export { SettingsScreen } from '../screens/SettingsScreen';
-export { OnboardingScreen } from '../screens/OnboardingScreen';
-export { AnalyticsScreen } from '../screens/AnalyticsScreen';
+// Core functionality (hooks, scoring, advice engines, etc.)
+export * from './core';
+
+// Types package
+export * from './types';
 
 // =====================================================
-// SHARED UI COMPONENTS
+// UI SYSTEM EXPORTS
 // =====================================================
 
-// Loading & Error Components
+// Base UI components (design system)
+export * from './ui';
+
+// =====================================================
+// COMPONENT EXPORTS BY DOMAIN
+// =====================================================
+
+// Dashboard components
+export * from './dashboard';
+
+// Analytics components  
+export * from './analytics';
+
+// Onboarding components
+export * from './onboarding';
+
+// Shared utility components
+export * from './shared';
+
+// Screen components
+export * from './screens';
+
+// All components (convenience export)
+export * from './components';
+
+// =====================================================
+// EXPLICIT EXPORTS FOR BETTER IDE SUPPORT
+// =====================================================
+
+// Core hooks
 export {
-  LoadingSpinner,
-  LoadingSpinnerPresets,
-  DashboardLoader,
-  AdviceLoader,
-  SavingLoader,
-  AnalyticsLoader,
-  SetupLoader,
-} from './LoadingSpinner';
+  useMicroAdvice,
+  useWellnessDashboard,
+  useUserPreferences,
+  useSystemAnalytics,
+  useUserInitialization,
+  useSupabaseEdgeFunctions,
+} from './core/hooks';
 
-export {
-  ErrorBanner,
-  ErrorMessages,
-  WarningMessages,
-  InfoMessages,
-  NetworkErrorBanner,
-  AuthErrorBanner,
-  UnsavedChangesBanner,
-  SuccessBanner,
-} from './ErrorBanner';
+// Key components
+export { AdviceCard } from './dashboard/AdviceCard';
+export { LifeScoreRing } from './dashboard/LifeScoreRing';
+export { TodayStats } from './dashboard/TodayStats';
+export { QuickMetrics } from './dashboard/QuickMetrics';
+export { RecentActivities } from './dashboard/RecentActivities';
+export { AchievementsBanner } from './dashboard/AchievementsBanner';
 
-// Progress Components
-export {
-  ProgressBar,
-  LifeScoreProgressBar,
-  OnboardingProgressBar,
-  DownloadProgressBar,
-  HealthMetricProgressBar,
-  CircularProgress,
-  StepProgress,
-} from './ProgressBar';
+export { TrendChart } from './analytics/TrendChart';
+export { CategoryInsightCard } from './analytics/CategoryInsightCard';
+export { PatternInsightCard } from './analytics/PatternInsightCard';
+export { BurnoutRiskCard } from './analytics/BurnoutRiskCard';
 
-// Metric Components
-export {
-  MetricCard,
-  PercentageCard,
-  CounterCard,
-  TimeCard,
-  ScoreCard,
-  MiniMetricCard,
-  MetricGrid,
-} from './MetricCard';
+export { LifeScoreInput } from './onboarding/LifeScoreInput';
+
+export { LoadingSpinner } from './shared/LoadingSpinner';
+export { ErrorBanner } from './shared/ErrorBanner';
+export { ProgressBar } from './shared/ProgressBar';
+export { MetricCard } from './shared/MetricCard';
+
+export { DashboardScreen } from './screens/DashboardScreen';
+export { AnalyticsScreen } from './screens/AnalyticsScreen';
+export { OnboardingScreen } from './screens/OnboardingScreen';
+export { SettingsScreen } from './screens/SettingsScreen';
+
+// UI components
+export { Button } from './ui/Button';
+export { Card } from './ui/Card';
+export { Typography } from './ui/Typography';
 
 // =====================================================
-// DASHBOARD COMPONENTS
+// COMPONENT COLLECTIONS
 // =====================================================
 
-// Core Dashboard Components
-export { AdviceCard } from './AdviceCard';
-export { LifeScoreRing } from './LifeScoreRing';
+export const LifeOSComponents = {
+  // Dashboard
+  Dashboard: {
+    AdviceCard: require('./dashboard/AdviceCard').AdviceCard,
+    LifeScoreRing: require('./dashboard/LifeScoreRing').LifeScoreRing,
+    TodayStats: require('./dashboard/TodayStats').TodayStats,
+    QuickMetrics: require('./dashboard/QuickMetrics').QuickMetrics,
+    RecentActivities: require('./dashboard/RecentActivities').RecentActivities,
+    AchievementsBanner: require('./dashboard/AchievementsBanner').AchievementsBanner,
+  },
 
-// Dashboard Stats & Metrics
-export {
-  QuickMetrics,
-  WeeklyTrendsMetrics,
-  CompactMetrics,
-} from './QuickMetrics';
+  // Analytics
+  Analytics: {
+    TrendChart: require('./analytics/TrendChart').TrendChart,
+    CategoryInsightCard: require('./analytics/CategoryInsightCard').CategoryInsightCard,
+    PatternInsightCard: require('./analytics/PatternInsightCard').PatternInsightCard,
+    BurnoutRiskCard: require('./analytics/BurnoutRiskCard').BurnoutRiskCard,
+  },
 
-export { TodayStats } from './TodayStats';
+  // Onboarding
+  Onboarding: {
+    LifeScoreInput: require('./onboarding/LifeScoreInput').LifeScoreInput,
+  },
 
-export { RecentActivities } from './RecentActivities';
+  // Shared
+  Shared: {
+    LoadingSpinner: require('./shared/LoadingSpinner').LoadingSpinner,
+    ErrorBanner: require('./shared/ErrorBanner').ErrorBanner,
+    ProgressBar: require('./shared/ProgressBar').ProgressBar,
+    MetricCard: require('./shared/MetricCard').MetricCard,
+  },
 
-export { AchievementsBanner } from './AchievementsBanner';
+  // Screens
+  Screens: {
+    DashboardScreen: require('./screens/DashboardScreen').DashboardScreen,
+    AnalyticsScreen: require('./screens/AnalyticsScreen').AnalyticsScreen,
+    OnboardingScreen: require('./screens/OnboardingScreen').OnboardingScreen,
+    SettingsScreen: require('./screens/SettingsScreen').SettingsScreen,
+  },
+
+  // UI
+  UI: {
+    Button: require('./ui/Button').Button,
+    Card: require('./ui/Card').Card,
+    Typography: require('./ui/Typography').Typography,
+  },
+} as const;
 
 // =====================================================
-// ANALYTICS COMPONENTS
+// HOOKS COLLECTION
 // =====================================================
 
-// Chart Components
-export {
-  TrendChart,
-  LifeScoreTrendChart,
-  EngagementTrendChart,
-  CompletionTrendChart,
-  MiniTrendChart,
-  MultiSeriesChart,
-} from './TrendChart';
-
-// Insight Components
-export { CategoryInsightCard } from './CategoryInsightCard';
-export { PatternInsightCard } from './PatternInsightCard';
-export { BurnoutRiskCard } from './BurnoutRiskCard';
+export const LifeOSHooks = {
+  useMicroAdvice: require('./core/hooks/useMicroAdvice').useMicroAdvice,
+  useWellnessDashboard: require('./core/hooks/useWellnessDashboard').useWellnessDashboard,
+  useUserPreferences: require('./core/hooks/useUserPreferences').useUserPreferences,
+  useSystemAnalytics: require('./core/hooks/useSystemAnalytics').useSystemAnalytics,
+  useUserInitialization: require('./core/hooks/useUserInitialization').useUserInitialization,
+  useSupabaseEdgeFunctions: require('./core/hooks/useSupabaseEdgeFunctions').useSupabaseEdgeFunctions,
+} as const;
 
 // =====================================================
-// ONBOARDING COMPONENTS
+// UTILITIES COLLECTION
 // =====================================================
 
-export { LifeScoreInput } from './LifeScoreInput';
+export const LifeOSUtils = {
+  // From core
+  CoreUtils: require('./core').CoreUtils,
+  LIFEOS_CONSTANTS: require('./core').LIFEOS_CONSTANTS,
+  
+  // From components
+  formatters: require('./components').formatters,
+  DefaultTheme: require('./components').DefaultTheme,
+  LightTheme: require('./components').LightTheme,
+} as const;
 
 // =====================================================
-// TYPE EXPORTS
+// TYPE COLLECTIONS
 // =====================================================
 
-// Re-export types for convenience
 export type {
-  // From hooks
-  MicroAdvice,
+  // Core types
+  HealthMetrics,
   LifeScoreV2,
+  MicroAdvice,
   WellnessDashboard,
   TodayStats,
   RecentActivity,
@@ -131,293 +190,163 @@ export type {
   OnboardingAnswers,
   InitializationResult,
   InitializationProgress,
-} from '../hooks';
+  UserProfile,
+} from './core';
 
-// Component-specific types
-export interface ComponentTheme {
-  primary: string;
-  secondary: string;
-  success: string;
-  warning: string;
-  error: string;
-  background: string;
-  surface: string;
-  text: string;
-  textSecondary: string;
-}
-
-export interface AnimationConfig {
-  duration: number;
-  delay?: number;
-  useNativeDriver?: boolean;
-}
-
-export interface CommonProps {
-  style?: any; // ViewStyle from react-native
-  showAnimation?: boolean;
-  compact?: boolean;
-  onPress?: () => void;
-}
+export type {
+  // Component types
+  ComponentProps,
+  ComponentTheme,
+  AnimationConfig,
+} from './components';
 
 // =====================================================
-// COMPONENT COLLECTIONS
+// QUICK START EXAMPLES
 // =====================================================
 
-// Dashboard Component Collection
-export const DashboardComponents = {
-  AdviceCard,
-  LifeScoreRing,
-  QuickMetrics,
-  TodayStats,
-  RecentActivities,
-  AchievementsBanner,
-} as const;
+export const QuickStart = {
+  // Dashboard setup example
+  dashboardExample: `
+import { LifeOSComponents, LifeOSHooks } from '@lifeos/packages';
 
-// Analytics Component Collection
-export const AnalyticsComponents = {
-  TrendChart,
-  CategoryInsightCard,
-  PatternInsightCard,
-  BurnoutRiskCard,
-  LifeScoreTrendChart,
-  EngagementTrendChart,
-  CompletionTrendChart,
-  MiniTrendChart,
-  MultiSeriesChart,
-} as const;
+const Dashboard = () => {
+  const { dashboard, loading } = LifeOSHooks.useWellnessDashboard();
+  const { currentAdvice } = LifeOSHooks.useMicroAdvice();
 
-// Shared Component Collection
-export const SharedComponents = {
-  LoadingSpinner,
-  ErrorBanner,
-  ProgressBar,
-  MetricCard,
-} as const;
-
-// Onboarding Component Collection
-export const OnboardingComponents = {
-  LifeScoreInput,
-} as const;
-
-// =====================================================
-// UTILITY FUNCTIONS
-// =====================================================
-
-// Theme utilities
-export const getThemeColor = (theme: ComponentTheme, color: keyof ComponentTheme): string => {
-  return theme[color];
+  return (
+    <View>
+      <LifeOSComponents.Dashboard.LifeScoreRing 
+        lifeScore={dashboard?.current_life_score} 
+      />
+      {currentAdvice && (
+        <LifeOSComponents.Dashboard.AdviceCard advice={currentAdvice} />
+      )}
+      <LifeOSComponents.Dashboard.TodayStats stats={dashboard?.today_stats} />
+    </View>
+  );
 };
+  `,
 
-// Animation utilities
-export const createFadeAnimation = (
-  animatedValue: any, // Animated.Value
-  config?: AnimationConfig
-) => {
-  const { duration = 600, delay = 0, useNativeDriver = true } = config || {};
-  
-  return {
-    toValue: 1,
-    duration,
-    delay,
-    useNativeDriver,
-  };
+  // Analytics setup example
+  analyticsExample: `
+import { LifeOSComponents, LifeOSHooks } from '@lifeos/packages';
+
+const Analytics = () => {
+  const { analytics } = LifeOSHooks.useSystemAnalytics();
+
+  return (
+    <View>
+      <LifeOSComponents.Analytics.TrendChart 
+        data={analytics?.trends.life_score_trends} 
+      />
+      <LifeOSComponents.Analytics.BurnoutRiskCard 
+        riskLevel={analytics?.burnout_analysis.risk_level} 
+      />
+    </View>
+  );
 };
+  `,
 
-export const createScaleAnimation = (
-  animatedValue: any, // Animated.Value
-  config?: AnimationConfig
-) => {
-  const { duration = 500, delay = 0, useNativeDriver = true } = config || {};
-  
-  return {
-    toValue: 1,
-    duration,
-    delay,
-    useNativeDriver,
-    tension: 100,
-    friction: 8,
-  };
+  // Onboarding setup example
+  onboardingExample: `
+import { LifeOSComponents, LifeOSHooks } from '@lifeos/packages';
+
+const Onboarding = () => {
+  const { completeOnboarding } = LifeOSHooks.useUserInitialization();
+
+  return (
+    <LifeOSComponents.Onboarding.LifeScoreInput
+      onStressChange={(value) => console.log('Stress:', value)}
+      onEnergyChange={(value) => console.log('Energy:', value)}
+      onSleepChange={(value) => console.log('Sleep:', value)}
+    />
+  );
 };
-
-// Component size utilities
-export const getComponentSize = (size: 'small' | 'medium' | 'large') => {
-  const sizes = {
-    small: {
-      padding: 12,
-      fontSize: 12,
-      iconSize: 16,
-    },
-    medium: {
-      padding: 16,
-      fontSize: 14,
-      iconSize: 20,
-    },
-    large: {
-      padding: 20,
-      fontSize: 16,
-      iconSize: 24,
-    },
-  };
-  
-  return sizes[size];
-};
-
-// Format utilities for components
-export const formatters = {
-  duration: (minutes: number): string => {
-    if (minutes < 60) return `${minutes}min`;
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-  },
-  
-  percentage: (value: number, decimals: number = 1): string => {
-    return `${value.toFixed(decimals)}%`;
-  },
-  
-  score: (value: number, maxValue: number = 10): string => {
-    return `${value.toFixed(1)}/${maxValue}`;
-  },
-  
-  timeAgo: (timestamp: string): string => {
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diffMs = now.getTime() - time.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMinutes < 1) return 'Ora';
-    if (diffMinutes < 60) return `${diffMinutes}min fa`;
-    if (diffHours < 24) return `${diffHours}h fa`;
-    if (diffDays < 7) return `${diffDays}g fa`;
-    
-    return time.toLocaleDateString('it-IT', {
-      day: 'numeric',
-      month: 'short',
-    });
-  },
-  
-  number: (value: number): string => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-    return value.toString();
-  },
-};
-
-// =====================================================
-// DEFAULT THEMES
-// =====================================================
-
-export const DefaultTheme: ComponentTheme = {
-  primary: '#7c3aed',
-  secondary: '#3b82f6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  background: '#1a1a2e',
-  surface: '#16213e',
-  text: '#ffffff',
-  textSecondary: '#9ca3af',
-};
-
-export const LightTheme: ComponentTheme = {
-  primary: '#7c3aed',
-  secondary: '#3b82f6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  background: '#ffffff',
-  surface: '#f8fafc',
-  text: '#1f2937',
-  textSecondary: '#6b7280',
-};
-
-// =====================================================
-// COMPONENT FACTORY FUNCTIONS
-// =====================================================
-
-// Create themed components
-export const createThemedComponent = <T extends React.ComponentType<any>>(
-  Component: T,
-  theme: ComponentTheme
-) => {
-  return React.forwardRef<any, React.ComponentProps<T>>((props, ref) => {
-    return React.createElement(Component, { ...props, theme, ref });
-  });
-};
-
-// Create animated component wrapper
-export const createAnimatedComponent = <T extends React.ComponentType<any>>(
-  Component: T,
-  defaultAnimation?: AnimationConfig
-) => {
-  return React.forwardRef<any, React.ComponentProps<T> & { animationConfig?: AnimationConfig }>((props, ref) => {
-    const { animationConfig, ...otherProps } = props;
-    const finalConfig = { ...defaultAnimation, ...animationConfig };
-    
-    return React.createElement(Component, { 
-      ...otherProps, 
-      animationConfig: finalConfig,
-      showAnimation: true,
-      ref 
-    });
-  });
-};
-
-// =====================================================
-// PRESETS AND CONFIGURATIONS
-// =====================================================
-
-export const ComponentPresets = {
-  LoadingSpinner: LoadingSpinnerPresets,
-  
-  ErrorMessages: {
-    ...ErrorMessages,
-    ...WarningMessages,
-    ...InfoMessages,
-  },
-  
-  Animations: {
-    fast: { duration: 300 },
-    normal: { duration: 600 },
-    slow: { duration: 1000 },
-    spring: { tension: 100, friction: 8 },
-  },
-  
-  Sizes: {
-    small: getComponentSize('small'),
-    medium: getComponentSize('medium'),
-    large: getComponentSize('large'),
-  },
+  `,
 } as const;
 
 // =====================================================
-// VERSION INFO
+// VERSION & METADATA
 // =====================================================
 
-export const COMPONENTS_VERSION = '1.0.0';
-export const LAST_UPDATED = '2024-12-19';
+export const LifeOSMetadata = {
+  version: '1.0.0',
+  lastUpdated: '2024-12-19',
+  author: 'LifeOS Team',
+  license: 'MIT',
+  description: 'Complete wellness and micro-advice system for React Native',
+  
+  packages: {
+    core: require('./core/package.json').version,
+    types: require('./types/package.json').version,
+    ui: require('./ui/package.json').version,
+  },
+
+  components: {
+    dashboard: 6,
+    analytics: 4,
+    onboarding: 1,
+    shared: 4,
+    screens: 4,
+    ui: 3,
+  },
+
+  hooks: 6,
+  
+  features: {
+    microAdviceEngine: true,
+    lifeScoreTracking: true,
+    burnoutPrevention: true,
+    intelligentTiming: true,
+    softGamification: true,
+    realTimeAnalytics: true,
+    personalizedOnboarding: true,
+  },
+} as const;
 
 // =====================================================
 // DEVELOPMENT UTILITIES
 // =====================================================
 
-export const DevUtils = {
-  logComponentRender: (componentName: string) => {
+export const DevTools = {
+  logVersion: () => {
     if (__DEV__) {
-      console.log(`[LifeOS] ${componentName} rendered`);
+      console.log(`
+🚀 LifeOS v${LifeOSMetadata.version}
+📦 Components: ${Object.values(LifeOSMetadata.components).reduce((a, b) => a + b, 0)}
+🎣 Hooks: ${LifeOSMetadata.hooks}
+📅 Updated: ${LifeOSMetadata.lastUpdated}
+      `);
     }
   },
-  
-  measurePerformance: (componentName: string, fn: () => void) => {
+
+  validateSetup: () => {
+    const missing = [];
+    
+    // Check core dependencies
+    if (!LifeOSHooks.useMicroAdvice) missing.push('useMicroAdvice hook');
+    if (!LifeOSComponents.Dashboard.AdviceCard) missing.push('AdviceCard component');
+    
+    if (missing.length > 0) {
+      console.error('❌ LifeOS Setup Issues:', missing);
+      return false;
+    }
+    
+    console.log('✅ LifeOS Setup Complete');
+    return true;
+  },
+
+  listComponents: () => {
     if (__DEV__) {
-      const start = performance.now();
-      fn();
-      const end = performance.now();
-      console.log(`[LifeOS] ${componentName} execution time: ${end - start}ms`);
-    } else {
-      fn();
+      console.table(LifeOSMetadata.components);
     }
   },
-};
+} as const;
+
+// =====================================================
+// AUTO-INITIALIZE IN DEV
+// =====================================================
+
+if (__DEV__) {
+  DevTools.logVersion();
+}
