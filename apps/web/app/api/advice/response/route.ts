@@ -96,11 +96,11 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in advice response API:', error);
     
     // Handle specific error types
-    if (error.message?.includes('Session not found')) {
+    if (error?.message?.includes('Session not found')) {
       return NextResponse.json(
         { 
           error: 'Session not found',
