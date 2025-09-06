@@ -192,16 +192,17 @@ async function getCompletionStatistics(supabase: any, userId: string) {
       .select('best_count')
       .eq('user_id', userId);
 
-    const total = (dailyCompletions || []).reduce((sum, day) => sum + day.completed_count, 0);
+    // Use explicit types for all reduce and map operations
+    const total = (dailyCompletions || []).reduce((sum: number, day: any) => sum + day.completed_count, 0);
     const weeklyTotal = (dailyCompletions || [])
-      .filter(day => new Date(day.date) >= sevenDaysAgo)
-      .reduce((sum, day) => sum + day.completed_count, 0);
+      .filter((day: any) => new Date(day.date) >= sevenDaysAgo)
+      .reduce((sum: number, day: any) => sum + day.completed_count, 0);
 
     const daysWithActivity = (dailyCompletions || []).filter((day: any) => day.completed_count > 0).length;
     const totalDays = Math.min(30, dailyCompletions?.length || 0);
     const rate = totalDays > 0 ? daysWithActivity / totalDays : 0;
 
-    const bestStreak = Math.max(...(streaks || []).map(s => s.best_count), 0);
+    const bestStreak = Math.max(...(streaks || []).map((s: any) => s.best_count), 0);
 
     return {
       total,
@@ -244,8 +245,8 @@ function calculateImprovementRate(trends: any[]) {
 
   if (recent.length === 0 || previous.length === 0) return 0;
 
-  const recentAvg = recent.reduce((sum, score) => sum + score, 0) / recent.length;
-  const previousAvg = previous.reduce((sum, score) => sum + score, 0) / previous.length;
+  const recentAvg = recent.reduce((sum: number, score: number) => sum + score, 0) / recent.length;
+  const previousAvg = previous.reduce((sum: number, score: number) => sum + score, 0) / previous.length;
 
   return previousAvg > 0 ? Math.round(((recentAvg - previousAvg) / previousAvg) * 100) : 0;
 }
@@ -269,7 +270,7 @@ function generateWellnessInsights(
   }
 
   // Streak insights
-  const activeStreak = streaks.find(s => s.current_count > 0);
+  const activeStreak = streaks.find((s: any) => s.current_count > 0);
   if (activeStreak && activeStreak.current_count >= 7) {
     insights.push(`Fantastico! Hai una streak attiva di ${activeStreak.current_count} giorni`);
   } else if (activeStreak && activeStreak.current_count >= 3) {
