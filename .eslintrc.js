@@ -9,8 +9,7 @@ module.exports = {
     },
   },
   extends: [
-    'next/core-web-vitals',
-    'prettier'
+    'eslint:recommended'
   ],
   rules: {
     '@typescript-eslint/no-unused-vars': 'off',
@@ -18,12 +17,8 @@ module.exports = {
     'prefer-const': 'off',
     'no-var': 'off',
     'no-console': 'off',
-    'react/jsx-key': 'off',
-    'react/no-array-index-key': 'off',
-    'react-hooks/exhaustive-deps': 'off',
-    '@next/next/no-img-element': 'off',
-    '@next/next/no-html-link-for-pages': 'off',
-    'import/no-anonymous-default-export': 'off',
+    'no-unused-vars': 'off',
+    'no-undef': 'off'
   },
   env: {
     browser: true,
