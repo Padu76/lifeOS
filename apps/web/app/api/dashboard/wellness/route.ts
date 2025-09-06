@@ -157,7 +157,7 @@ async function getRecentAchievements(supabase: any, userId: string) {
       .gte('earned_date', sevenDaysAgo.toISOString())
       .order('earned_date', { ascending: false });
 
-    return (achievements || []).map(achievement => ({
+    return (achievements || []).map((achievement: any) => ({
       title: achievement.title,
       description: achievement.description,
       earned_date: achievement.earned_date,
