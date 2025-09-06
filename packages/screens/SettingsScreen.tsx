@@ -57,7 +57,409 @@ const TimePickerModal: React.FC<TimePickerModalProps> = ({
         <View style={styles.timePickerModal}>
           <Text style={styles.modalTitle}>{title}</Text>
           
-          <View style={styles.timePickerContainer}>
+          <View style={styles.setting}>
+            <Text style={styles.settingLabel}>
+              Intervallo minimo tra consigli: {preferences?.min_intervention_gap_minutes ?? 90} min
+            </Text>
+            <View style={styles.sliderContainer}>
+              {[30, 60, 90, 120, 180, 240].map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[
+                    styles.sliderOption,
+                    preferences?.min_intervention_gap_minutes === value && styles.selectedSliderOption
+                  ]}
+                  onPress={() => updateInterventionLimits(undefined, value)}
+                >
+                  <Text style={[
+                    styles.sliderOptionText,
+                    preferences?.min_intervention_gap_minutes === value && styles.selectedSliderOptionText
+                  ]}>
+                    {value}m
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Bottom spacing */}
+        <View style={styles.bottomSpacing} />
+      </ScrollView>
+
+      {/* Time Picker Modal */}
+      <TimePickerModal
+        visible={timePickerVisible}
+        title={timePickerType === 'start' ? 'Ora di inizio' : 'Ora di fine'}
+        time={
+          timePickerType === 'start'
+            ? preferences?.quiet_hours?.start_time ?? '22:00'
+            : preferences?.quiet_hours?.end_time ?? '07:00'
+        }
+        onTimeSelect={handleQuietHoursTimeChange}
+        onClose={() => setTimePickerVisible(false)}
+      />
+
+      {/* Focus Area Modal */}
+      <Modal
+        visible={showFocusAreaModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFocusAreaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.focusAreaModal}>
+            <Text style={styles.modalTitle}>Aggiungi Area di Focus</Text>
+            
+            <TextInput
+              style={styles.focusAreaInput}
+              placeholder="Es. Meditazione, Esercizio fisico..."
+              placeholderTextColor="#6b7280"
+              value={focusAreaInput}
+              onChangeText={setFocusAreaInput}
+              autoFocus
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setShowFocusAreaModal(false);
+                  setFocusAreaInput('');
+                }}
+              >
+                <Text style={styles.modalCancelText}>Annulla</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.modalConfirmButton,
+                  !focusAreaInput.trim() && styles.disabledButton
+                ]}
+                onPress={handleAddFocusArea}
+                disabled={!focusAreaInput.trim()}
+              >
+                <Text style={[
+                  styles.modalConfirmText,
+                  !focusAreaInput.trim() && styles.disabledButtonText
+                ]}>
+                  Aggiungi
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#1a1a2e',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+  backButton: {
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#ffffff',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
+  unsavedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f97316',
+  },
+  saveStatus: {
+    backgroundColor: '#374151',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  saveStatusText: {
+    fontSize: 12,
+    color: '#f97316',
+    textAlign: 'center',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  section: {
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 16,
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#7c3aed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 18,
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  setting: {
+    marginBottom: 24,
+  },
+  settingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  settingDescription: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginBottom: 12,
+  },
+  optionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  selectedOption: {
+    backgroundColor: '#7c3aed',
+    borderColor: '#7c3aed',
+  },
+  optionText: {
+    fontSize: 14,
+    color: '#e5e7eb',
+  },
+  selectedOptionText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  focusAreas: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  focusAreaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#374151',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  focusAreaText: {
+    fontSize: 14,
+    color: '#e5e7eb',
+    marginRight: 8,
+  },
+  removeChipButton: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeChipText: {
+    fontSize: 12,
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  timeSettings: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  timeSetting: {
+    flex: 1,
+    backgroundColor: '#374151',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  timeLabel: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 4,
+  },
+  timeValue: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  sliderContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sliderOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  selectedSliderOption: {
+    backgroundColor: '#7c3aed',
+    borderColor: '#7c3aed',
+  },
+  sliderOptionText: {
+    fontSize: 12,
+    color: '#e5e7eb',
+  },
+  selectedSliderOptionText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  bottomSpacing: {
+    height: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timePickerModal: {
+    backgroundColor: '#1f2937',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 300,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  timePickerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  timeColumn: {
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  timeScroll: {
+    height: 120,
+    backgroundColor: '#374151',
+    borderRadius: 8,
+  },
+  timeOption: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  selectedTimeOption: {
+    backgroundColor: '#7c3aed',
+  },
+  timeOptionText: {
+    fontSize: 16,
+    color: '#e5e7eb',
+  },
+  selectedTimeOptionText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  focusAreaModal: {
+    backgroundColor: '#1f2937',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+  },
+  focusAreaInput: {
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    padding: 12,
+    color: '#ffffff',
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  modalCancelText: {
+    color: '#e5e7eb',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalConfirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#7c3aed',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  modalConfirmText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    backgroundColor: '#4b5563',
+  },
+  disabledButtonText: {
+    color: '#9ca3af',
+  },
+});styles.timePickerContainer}>
             <View style={styles.timeColumn}>
               <Text style={styles.timeLabel}>Ore</Text>
               <ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>
