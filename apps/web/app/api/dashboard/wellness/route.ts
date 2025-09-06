@@ -6,16 +6,51 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     
-    // Rimuovo controllo autenticazione obbligatorio - usa dati di default se non autenticato
+    // No auth required - usa dati di default se non autenticato
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || null;
     
-    // Get comprehensive wellness dashboard data
-    const dashboardData = await buildDashboardData(supabase, userId);
+    // Get life score data
+    const lifeScore = await getCurrentLifeScore(supabase, userId);
+    
+    // Get other dashboard data
+    const activeStreaks = await getActiveStreaks(supabase, userId);
+    const recentAchievements = await getRecentAchievements(supabase, userId);
+    const completionStats = await getCompletionStatistics(supabase, userId);
+    const lifeScoreTrends = await getLifeScoreTrends(supabase, userId);
+    const userPreferences = await getUserPreferences(supabase, userId);
+    
+    // Generate insights
+    const wellnessInsights = generateWellnessInsights(lifeScore, activeStreaks, completionStats, lifeScoreTrends);
 
+    // STRUTTURA CORRETTA: campi diretti + struttura originale
     return NextResponse.json({
       success: true,
-      data: dashboardData,
+      data: {
+        // Campi che il frontend cerca direttamente
+        overall: lifeScore.overall,
+        stress: lifeScore.stress,
+        energy: lifeScore.energy,
+        sleep: lifeScore.sleep,
+        
+        // Struttura originale completa
+        current_life_score: lifeScore,
+        active_streaks: activeStreaks,
+        recent_achievements: recentAchievements,
+        statistics: {
+          total_completions: completionStats.total,
+          weekly_completions: completionStats.weekly,
+          completion_rate: completionStats.rate,
+          best_streak: completionStats.best_streak
+        },
+        trends: {
+          lifescore_history: lifeScoreTrends,
+          improvement_rate: calculateImprovementRate(lifeScoreTrends)
+        },
+        wellness_insights: wellnessInsights,
+        next_advice_eta: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        user_preferences: userPreferences
+      },
       generated_at: new Date().toISOString(),
       user_id: userId || 'guest'
     });
@@ -23,98 +58,47 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error in wellness dashboard API:', error);
     
-    // Return fallback data compatibile con frontend
-    const fallbackData = {
-      overall: 5,
-      stress: 5,
-      energy: 5,
-      sleep: 5,
-      current_life_score: { stress: 5, energy: 5, sleep: 5, overall: 5 },
-      active_streaks: [],
-      recent_achievements: [],
-      statistics: { total_completions: 0, weekly_completions: 0, completion_rate: 0, best_streak: 0 },
-      trends: { lifescore_history: [], improvement_rate: 0 },
-      wellness_insights: ['Dashboard temporaneamente non disponibile'],
-      next_advice_eta: new Date(Date.now() + 2 * 60 * 60 * 1000),
-      user_preferences: { notification_frequency: 'balanced', preferred_tone: 'encouraging', focus_areas: ['stress', 'energy', 'sleep'], quiet_hours: { start: '22:00', end: '08:00' } },
-      error_mode: true
-    };
-    
+    // Fallback con struttura corretta
     return NextResponse.json({
       success: false,
-      data: fallbackData,
+      data: {
+        // Campi diretti per frontend
+        overall: 5,
+        stress: 5,
+        energy: 5,
+        sleep: 5,
+        
+        // Struttura completa
+        current_life_score: { stress: 5, energy: 5, sleep: 5, overall: 5 },
+        active_streaks: [],
+        recent_achievements: [],
+        statistics: { total_completions: 0, weekly_completions: 0, completion_rate: 0, best_streak: 0 },
+        trends: { lifescore_history: [], improvement_rate: 0 },
+        wellness_insights: ['Dashboard temporaneamente non disponibile'],
+        next_advice_eta: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        user_preferences: { notification_frequency: 'balanced', preferred_tone: 'encouraging', focus_areas: ['stress', 'energy', 'sleep'], quiet_hours: { start: '22:00', end: '08:00' } },
+        error_mode: true
+      },
       message: 'Using fallback dashboard data',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 }
 
-// Build comprehensive dashboard data
-async function buildDashboardData(supabase: any, userId: string | null) {
-  const today = new Date().toISOString().split('T')[0];
-  
-  try {
-    // Get current life score
-    const currentLifeScore = await getCurrentLifeScore(supabase, userId, today);
-    
-    // Get active streaks
-    const activeStreaks = await getActiveStreaks(supabase, userId);
-    
-    // Get recent achievements
-    const recentAchievements = await getRecentAchievements(supabase, userId);
-    
-    // Get completion statistics
-    const completionStats = await getCompletionStatistics(supabase, userId);
-    
-    // Get life score trends
-    const lifeScoreTrends = await getLifeScoreTrends(supabase, userId);
-    
-    // Generate wellness insights
-    const wellnessInsights = generateWellnessInsights(
-      currentLifeScore,
-      activeStreaks,
-      completionStats,
-      lifeScoreTrends
-    );
-
-    return {
-      current_life_score: currentLifeScore,
-      active_streaks: activeStreaks,
-      recent_achievements: recentAchievements,
-      statistics: {
-        total_completions: completionStats.total,
-        weekly_completions: completionStats.weekly,
-        completion_rate: completionStats.rate,
-        best_streak: completionStats.best_streak
-      },
-      trends: {
-        lifescore_history: lifeScoreTrends,
-        improvement_rate: calculateImprovementRate(lifeScoreTrends)
-      },
-      wellness_insights: wellnessInsights,
-      next_advice_eta: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
-      user_preferences: await getUserPreferences(supabase, userId)
-    };
-
-  } catch (error) {
-    console.error('Error building dashboard data:', error);
-    throw error;
-  }
-}
-
-// Get current life score - USA SCHEMA CORRETTO
-async function getCurrentLifeScore(supabase: any, userId: string | null, date: string) {
+// Get current life score con schema corretto
+async function getCurrentLifeScore(supabase: any, userId: string | null) {
   try {
     if (!userId) {
-      // Dati di default se non autenticato
       return { stress: 5, energy: 5, sleep: 5, overall: 5 };
     }
 
+    const today = new Date().toISOString().split('T')[0];
+    
     const { data: score } = await supabase
       .from('lifescores')
       .select('score, sleep_score, activity_score, mental_score')
       .eq('user_id', userId)
-      .eq('date', date)
+      .eq('date', today)
       .maybeSingle();
 
     if (!score) {
@@ -122,23 +106,20 @@ async function getCurrentLifeScore(supabase: any, userId: string | null, date: s
     }
 
     return {
-      stress: 10 - (score.mental_score || 5), // Inversione logica: mental basso = stress alto
+      stress: 10 - (score.mental_score || 5),
       energy: score.activity_score || 5,
       sleep: score.sleep_score || 5,
       overall: score.score || 5
     };
   } catch (error) {
-    console.error('Error getting current life score:', error);
+    console.error('Error getting life score:', error);
     return { stress: 5, energy: 5, sleep: 5, overall: 5 };
   }
 }
 
-// Get active streaks
 async function getActiveStreaks(supabase: any, userId: string | null) {
   try {
-    if (!userId) {
-      return [];
-    }
+    if (!userId) return [];
 
     const { data: streaks } = await supabase
       .from('user_streaks')
@@ -158,12 +139,9 @@ async function getActiveStreaks(supabase: any, userId: string | null) {
   }
 }
 
-// Get recent achievements (last 7 days)
 async function getRecentAchievements(supabase: any, userId: string | null) {
   try {
-    if (!userId) {
-      return [];
-    }
+    if (!userId) return [];
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -187,7 +165,6 @@ async function getRecentAchievements(supabase: any, userId: string | null) {
   }
 }
 
-// Get completion statistics
 async function getCompletionStatistics(supabase: any, userId: string | null) {
   try {
     if (!userId) {
@@ -200,7 +177,6 @@ async function getCompletionStatistics(supabase: any, userId: string | null) {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Get user suggestions completions invece di daily_completions
     const { data: userSuggestions } = await supabase
       .from('user_suggestions')
       .select('*')
@@ -208,13 +184,11 @@ async function getCompletionStatistics(supabase: any, userId: string | null) {
       .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
       .order('date', { ascending: false });
 
-    // Get streaks for best streak calculation
     const { data: streaks } = await supabase
       .from('user_streaks')
       .select('best_count')
       .eq('user_id', userId);
 
-    // Count completions from user_suggestions
     const completedSuggestions = (userSuggestions || []).filter((s: any) => s.completed === true);
     const total = completedSuggestions.length;
     
@@ -222,7 +196,6 @@ async function getCompletionStatistics(supabase: any, userId: string | null) {
       .filter((s: any) => new Date(s.date) >= sevenDaysAgo)
       .length;
 
-    // Calculate unique days with completions
     const uniqueDays = new Set(completedSuggestions.map((s: any) => s.date)).size;
     const totalDays = Math.min(30, (userSuggestions || []).length > 0 ? 30 : 0);
     const rate = totalDays > 0 ? uniqueDays / totalDays : 0;
@@ -241,12 +214,9 @@ async function getCompletionStatistics(supabase: any, userId: string | null) {
   }
 }
 
-// Get life score trends (last 30 days) - USA SCHEMA CORRETTO
 async function getLifeScoreTrends(supabase: any, userId: string | null) {
   try {
-    if (!userId) {
-      return [];
-    }
+    if (!userId) return [];
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -258,7 +228,6 @@ async function getLifeScoreTrends(supabase: any, userId: string | null) {
       .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
       .order('date', { ascending: true });
 
-    // Trasforma i dati per mantenere compatibilità
     return (scores || []).map((score: any) => ({
       date: score.date,
       overall_score: score.score,
@@ -272,7 +241,6 @@ async function getLifeScoreTrends(supabase: any, userId: string | null) {
   }
 }
 
-// Calculate improvement rate from trends
 function calculateImprovementRate(trends: any[]) {
   if (trends.length < 7) return 0;
 
@@ -287,16 +255,9 @@ function calculateImprovementRate(trends: any[]) {
   return previousAvg > 0 ? Math.round(((recentAvg - previousAvg) / previousAvg) * 100) : 0;
 }
 
-// Generate wellness insights
-function generateWellnessInsights(
-  lifeScore: any,
-  streaks: any[],
-  stats: any,
-  trends: any[]
-): string[] {
+function generateWellnessInsights(lifeScore: any, streaks: any[], stats: any, trends: any[]): string[] {
   const insights: string[] = [];
 
-  // Life score insights
   if (lifeScore.overall >= 8) {
     insights.push('Eccellente! Il tuo benessere generale è molto alto');
   } else if (lifeScore.overall >= 6) {
@@ -305,7 +266,6 @@ function generateWellnessInsights(
     insights.push('I tuoi livelli potrebbero migliorare - considera più attività di self-care');
   }
 
-  // Streak insights
   const activeStreak = streaks.find((s: any) => s.current_count > 0);
   if (activeStreak && activeStreak.current_count >= 7) {
     insights.push(`Fantastico! Hai una streak attiva di ${activeStreak.current_count} giorni`);
@@ -313,7 +273,6 @@ function generateWellnessInsights(
     insights.push(`Stai costruendo una buona abitudine: ${activeStreak.current_count} giorni consecutivi`);
   }
 
-  // Completion rate insights
   if (stats.rate >= 80) {
     insights.push('Hai un ottimo tasso di completamento delle attività');
   } else if (stats.rate >= 50) {
@@ -322,7 +281,6 @@ function generateWellnessInsights(
     insights.push('Considera di iniziare con obiettivi più piccoli e raggiungibili');
   }
 
-  // Trend insights
   const improvementRate = calculateImprovementRate(trends);
   if (improvementRate > 10) {
     insights.push('I tuoi score stanno migliorando significativamente');
@@ -330,7 +288,6 @@ function generateWellnessInsights(
     insights.push('I tuoi livelli sono in calo - potrebbe essere utile un check-in più frequente');
   }
 
-  // Time-based insights
   const hour = new Date().getHours();
   if (hour >= 6 && hour <= 10) {
     insights.push('Ottimo momento per impostare le intenzioni della giornata');
@@ -340,15 +297,13 @@ function generateWellnessInsights(
     insights.push('Serata ideale per attività di rilassamento');
   }
 
-  // Ensure we have at least one insight
   if (insights.length === 0) {
     insights.push('Continua a tracciare i tuoi progressi per ricevere insights personalizzati');
   }
 
-  return insights.slice(0, 5); // Limit to 5 insights
+  return insights.slice(0, 5);
 }
 
-// Get user preferences
 async function getUserPreferences(supabase: any, userId: string | null) {
   try {
     if (!userId) {
