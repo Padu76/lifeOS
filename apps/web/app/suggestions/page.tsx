@@ -484,22 +484,7 @@ const SuggestionsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Error State */}
-      {error && (
-        <section className="relative px-6 mb-12">
-          <div className="container mx-auto max-w-4xl">
-            <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-6 text-center">
-              <p className="text-red-200 mb-4">{error}</p>
-              <button
-                onClick={handleRefresh}
-                className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Riprova
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Error State - Rimuovo perché uso fallback silenzioso */}
 
       {/* Active AI Suggestions */}
       {activeSuggestions.length > 0 && (
