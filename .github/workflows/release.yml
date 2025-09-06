@@ -1,0 +1,48 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate changelog
+        run: |
+          npm run changelog:generate
+      
+      - name: Build release assets
+        run: |
+          npm run build:all
+      
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: LifeOS ${{ github.ref_name }}
+          bodyFile: "CHANGELOG.md"
+          artifacts: "dist/*.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Publish to npm
+        run: |
+          cd packages
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
