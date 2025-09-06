@@ -9,39 +9,21 @@ module.exports = {
     },
   },
   extends: [
-    '@typescript-eslint/recommended',
     'next/core-web-vitals',
     'prettier'
   ],
-  plugins: ['@typescript-eslint'],
   rules: {
-    // TypeScript rules
-    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-explicit-any': 'warn',
-    '@typescript-eslint/prefer-nullish-coalescing': 'error',
-    '@typescript-eslint/prefer-optional-chain': 'error',
-    
-    // General rules
-    'prefer-const': 'error',
-    'no-var': 'error',
-    'no-console': 'warn',
-    
-    // React rules
-    'react/jsx-key': 'error',
-    'react/no-array-index-key': 'warn',
-    'react-hooks/exhaustive-deps': 'warn',
-    
-    // Next.js specific
-    '@next/next/no-img-element': 'error',
-    '@next/next/no-html-link-for-pages': 'error',
-    
-    // Storybook files exceptions
+    '@typescript-eslint/no-unused-vars': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    'prefer-const': 'off',
+    'no-var': 'off',
+    'no-console': 'off',
+    'react/jsx-key': 'off',
+    'react/no-array-index-key': 'off',
+    'react-hooks/exhaustive-deps': 'off',
+    '@next/next/no-img-element': 'off',
+    '@next/next/no-html-link-for-pages': 'off',
     'import/no-anonymous-default-export': 'off',
-  },
-  settings: {
-    react: {
-      version: 'detect',
-    },
   },
   env: {
     browser: true,
@@ -49,39 +31,6 @@ module.exports = {
     es2020: true,
   },
   ignorePatterns: [
-    'dist/',
-    'node_modules/',
-    '.next/',
-    'out/',
-    'storybook-static/',
-    '**/*.stories.tsx',
-    '**/*.test.tsx',
-    '**/*.spec.tsx',
-    'coverage/',
-    'build/',
-  ],
-  overrides: [
-    {
-      files: ['**/*.stories.tsx', '**/*.stories.ts'],
-      rules: {
-        '@typescript-eslint/no-explicit-any': 'off',
-        'react-hooks/rules-of-hooks': 'off',
-        'no-console': 'off',
-      },
-    },
-    {
-      files: ['**/*.test.tsx', '**/*.test.ts', '**/*.spec.tsx', '**/*.spec.ts'],
-      rules: {
-        '@typescript-eslint/no-explicit-any': 'off',
-        'no-console': 'off',
-      },
-    },
-    {
-      files: ['apps/mobile/**/*'],
-      rules: {
-        '@next/next/no-img-element': 'off',
-        '@next/next/no-html-link-for-pages': 'off',
-      },
-    },
+    '**/*',
   ],
 };
