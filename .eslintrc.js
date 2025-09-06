@@ -28,42 +28,52 @@ module.exports = {
     'plugin:import/typescript',
     'plugin:jsx-a11y/recommended',
   ],
+  settings: {
+    react: {
+      version: 'detect',
+    },
+    'import/resolver': {
+      typescript: {
+        alwaysTryTypes: true,
+        project: './tsconfig.json',
+      },
+      node: {
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      },
+    },
+  },
+  env: {
+    browser: true,
+    node: true,
+    es2022: true,
+    'react-native/react-native': true,
+  },
   rules: {
-    // Existing rules
+    // TypeScript rules
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/no-explicit-any': 'warn',
-    'prefer-const': 'error',
-    'no-var': 'error',
-    
-    // Additional LifeOS specific rules
-    '@typescript-eslint/no-floating-promises': 'error',
+    '@typescript-eslint/no-unsafe-assignment': 'warn',
+    '@typescript-eslint/no-unsafe-member-access': 'warn',
+    '@typescript-eslint/no-unsafe-call': 'warn',
+    '@typescript-eslint/no-unsafe-return': 'warn',
+    '@typescript-eslint/restrict-template-expressions': 'warn',
     '@typescript-eslint/prefer-nullish-coalescing': 'error',
     '@typescript-eslint/prefer-optional-chain': 'error',
+    '@typescript-eslint/no-floating-promises': 'error',
+    '@typescript-eslint/await-thenable': 'error',
+    '@typescript-eslint/no-misused-promises': 'error',
+
+    // React rules
+    'react/react-in-jsx-scope': 'off', // Not needed in React 17+
+    'react/prop-types': 'off', // Using TypeScript for prop validation
+    'react/jsx-uses-react': 'off',
+    'react/jsx-uses-vars': 'error',
+    'react/no-unescaped-entities': 'warn',
+    'react/display-name': 'warn',
     'react/jsx-key': 'error',
+    'react/jsx-no-duplicate-props': 'error',
+    'react/jsx-no-undef': 'error',
+    'react/jsx-pascal-case': 'error',
     'react/no-array-index-key': 'warn',
-    'react-hooks/exhaustive-deps': 'warn',
-    
-    // Storybook files exceptions
-    'import/no-anonymous-default-export': 'off',
-  },
-  ignorePatterns: [
-    'dist/', 
-    'node_modules/', 
-    '*.js', 
-    '.next/', 
-    'out/',
-    'storybook-static/',
-    '**/*.stories.tsx',
-    '**/*.test.tsx',
-    '**/*.spec.tsx'
-  ],
-  overrides: [
-    {
-      files: ['**/*.stories.tsx', '**/*.stories.ts'],
-      rules: {
-        '@typescript-eslint/no-explicit-any': 'off',
-        'react-hooks/rules-of-hooks': 'off',
-      }
-    }
-  ]
-};
+    'react/no-danger': 'warn',
+    'react/no-deprecate
