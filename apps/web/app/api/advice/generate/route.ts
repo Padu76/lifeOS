@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { MicroAdviceOrchestrator } from '../../../../packages/core/orchestrator/microAdviceOrchestrator';
-import { HealthMetrics, LifeScoreV2 } from '../../../../packages/types';
+import { MicroAdviceOrchestrator } from '@lifeos/core/orchestrator/microAdviceOrchestrator';
+import { HealthMetrics, LifeScoreV2 } from '@lifeos/types';
 
 export async function POST(request: NextRequest) {
   try {
