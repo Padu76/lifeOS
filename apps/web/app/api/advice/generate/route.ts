@@ -163,7 +163,6 @@ async function getCurrentUserMetrics(supabase: any, userId: string): Promise<Hea
     // Return safe defaults
     return {
       date: new Date().toISOString().split('T')[0],
-      user_id: userId,
       steps: 5000,
       sleep_hours: 7,
       mood_score: 5,
@@ -172,7 +171,7 @@ async function getCurrentUserMetrics(supabase: any, userId: string): Promise<Hea
       heart_rate: 70,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
-    };
+    } as HealthMetrics;
   }
 }
 
