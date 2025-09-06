@@ -26,9 +26,9 @@
     "@supabase/supabase-js": "^2.45.0",
     "@supabase/auth-helpers-nextjs": "^0.8.7",
     "@supabase/auth-helpers-react": "^0.4.2",
-    "@lifeos/core": "workspace:*",
-    "@lifeos/types": "workspace:*",
-    "@lifeos/ui": "workspace:*"
+    "@lifeos/core": "file:../../packages/core",
+    "@lifeos/types": "file:../../packages/types",
+    "@lifeos/ui": "file:../../packages/ui"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
