@@ -6,16 +6,9 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     
-    // Check authentication
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'User not authenticated' },
-        { status: 401 }
-      );
-    }
-
-    const userId = session.user.id;
+    // Rimuovo controllo autenticazione obbligatorio - usa dati di default se non autenticato
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || null;
     
     // Get comprehensive wellness dashboard data
     const dashboardData = await buildDashboardData(supabase, userId);
@@ -24,7 +17,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: dashboardData,
       generated_at: new Date().toISOString(),
-      user_id: userId
+      user_id: userId || 'guest'
     });
 
   } catch (error: any) {
@@ -35,7 +28,11 @@ export async function GET(request: NextRequest) {
       current_life_score: { stress: 5, energy: 5, sleep: 5, overall: 5 },
       active_streaks: [],
       recent_achievements: [],
+      statistics: { total_completions: 0, weekly_completions: 0, completion_rate: 0, best_streak: 0 },
+      trends: { lifescore_history: [], improvement_rate: 0 },
       wellness_insights: ['Dashboard temporaneamente non disponibile'],
+      next_advice_eta: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      user_preferences: { notification_frequency: 'balanced', preferred_tone: 'encouraging', focus_areas: ['stress', 'energy', 'sleep'], quiet_hours: { start: '22:00', end: '08:00' } },
       error_mode: true
     };
     
@@ -49,7 +46,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Build comprehensive dashboard data
-async function buildDashboardData(supabase: any, userId: string) {
+async function buildDashboardData(supabase: any, userId: string | null) {
   const today = new Date().toISOString().split('T')[0];
   
   try {
@@ -101,21 +98,30 @@ async function buildDashboardData(supabase: any, userId: string) {
   }
 }
 
-// Get current life score
-async function getCurrentLifeScore(supabase: any, userId: string, date: string) {
+// Get current life score - USA SCHEMA CORRETTO
+async function getCurrentLifeScore(supabase: any, userId: string | null, date: string) {
   try {
+    if (!userId) {
+      // Dati di default se non autenticato
+      return { stress: 5, energy: 5, sleep: 5, overall: 5 };
+    }
+
     const { data: score } = await supabase
       .from('lifescores')
-      .select('*')
+      .select('score, sleep_score, activity_score, mental_score')
       .eq('user_id', userId)
       .eq('date', date)
       .maybeSingle();
 
+    if (!score) {
+      return { stress: 5, energy: 5, sleep: 5, overall: 5 };
+    }
+
     return {
-      stress: score?.stress_score || 5,
-      energy: score?.energy_score || 5,
-      sleep: score?.sleep_score || 5,
-      overall: score?.overall_score || 5
+      stress: 10 - (score.mental_score || 5), // Inversione logica: mental basso = stress alto
+      energy: score.activity_score || 5,
+      sleep: score.sleep_score || 5,
+      overall: score.score || 5
     };
   } catch (error) {
     console.error('Error getting current life score:', error);
@@ -124,8 +130,12 @@ async function getCurrentLifeScore(supabase: any, userId: string, date: string) 
 }
 
 // Get active streaks
-async function getActiveStreaks(supabase: any, userId: string) {
+async function getActiveStreaks(supabase: any, userId: string | null) {
   try {
+    if (!userId) {
+      return [];
+    }
+
     const { data: streaks } = await supabase
       .from('user_streaks')
       .select('*')
@@ -145,8 +155,12 @@ async function getActiveStreaks(supabase: any, userId: string) {
 }
 
 // Get recent achievements (last 7 days)
-async function getRecentAchievements(supabase: any, userId: string) {
+async function getRecentAchievements(supabase: any, userId: string | null) {
   try {
+    if (!userId) {
+      return [];
+    }
+
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -170,17 +184,21 @@ async function getRecentAchievements(supabase: any, userId: string) {
 }
 
 // Get completion statistics
-async function getCompletionStatistics(supabase: any, userId: string) {
+async function getCompletionStatistics(supabase: any, userId: string | null) {
   try {
+    if (!userId) {
+      return { total: 0, weekly: 0, rate: 0, best_streak: 0 };
+    }
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Get daily completions
-    const { data: dailyCompletions } = await supabase
-      .from('daily_completions')
+    // Get user suggestions completions invece di daily_completions
+    const { data: userSuggestions } = await supabase
+      .from('user_suggestions')
       .select('*')
       .eq('user_id', userId)
       .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
@@ -192,21 +210,24 @@ async function getCompletionStatistics(supabase: any, userId: string) {
       .select('best_count')
       .eq('user_id', userId);
 
-    // Use explicit types for all reduce and map operations
-    const total = (dailyCompletions || []).reduce((sum: number, day: any) => sum + day.completed_count, 0);
-    const weeklyTotal = (dailyCompletions || [])
-      .filter((day: any) => new Date(day.date) >= sevenDaysAgo)
-      .reduce((sum: number, day: any) => sum + day.completed_count, 0);
+    // Count completions from user_suggestions
+    const completedSuggestions = (userSuggestions || []).filter((s: any) => s.completed === true);
+    const total = completedSuggestions.length;
+    
+    const weeklyCompleted = completedSuggestions
+      .filter((s: any) => new Date(s.date) >= sevenDaysAgo)
+      .length;
 
-    const daysWithActivity = (dailyCompletions || []).filter((day: any) => day.completed_count > 0).length;
-    const totalDays = Math.min(30, dailyCompletions?.length || 0);
-    const rate = totalDays > 0 ? daysWithActivity / totalDays : 0;
+    // Calculate unique days with completions
+    const uniqueDays = new Set(completedSuggestions.map((s: any) => s.date)).size;
+    const totalDays = Math.min(30, (userSuggestions || []).length > 0 ? 30 : 0);
+    const rate = totalDays > 0 ? uniqueDays / totalDays : 0;
 
     const bestStreak = Math.max(...(streaks || []).map((s: any) => s.best_count), 0);
 
     return {
       total,
-      weekly: weeklyTotal,
+      weekly: weeklyCompleted,
       rate: Math.round(rate * 100),
       best_streak: bestStreak
     };
@@ -216,20 +237,31 @@ async function getCompletionStatistics(supabase: any, userId: string) {
   }
 }
 
-// Get life score trends (last 30 days)
-async function getLifeScoreTrends(supabase: any, userId: string) {
+// Get life score trends (last 30 days) - USA SCHEMA CORRETTO
+async function getLifeScoreTrends(supabase: any, userId: string | null) {
   try {
+    if (!userId) {
+      return [];
+    }
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const { data: scores } = await supabase
       .from('lifescores')
-      .select('date, overall_score, stress_score, energy_score, sleep_score')
+      .select('date, score, sleep_score, activity_score, mental_score')
       .eq('user_id', userId)
       .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
       .order('date', { ascending: true });
 
-    return scores || [];
+    // Trasforma i dati per mantenere compatibilità
+    return (scores || []).map((score: any) => ({
+      date: score.date,
+      overall_score: score.score,
+      stress_score: 10 - (score.mental_score || 5),
+      energy_score: score.activity_score,
+      sleep_score: score.sleep_score
+    }));
   } catch (error) {
     console.error('Error getting life score trends:', error);
     return [];
@@ -313,8 +345,17 @@ function generateWellnessInsights(
 }
 
 // Get user preferences
-async function getUserPreferences(supabase: any, userId: string) {
+async function getUserPreferences(supabase: any, userId: string | null) {
   try {
+    if (!userId) {
+      return {
+        notification_frequency: 'balanced',
+        preferred_tone: 'encouraging',
+        focus_areas: ['stress', 'energy', 'sleep'],
+        quiet_hours: { start: '22:00', end: '08:00' }
+      };
+    }
+
     const { data: prefs } = await supabase
       .from('user_preferences')
       .select('*')
