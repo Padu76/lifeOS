@@ -96,11 +96,11 @@ export async function POST(request: NextRequest) {
       generated_at: new Date().toISOString()
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in advice generation API:', error);
     
     // Determine error type for appropriate response
-    if (error.message?.includes('No intervention needed')) {
+    if (error?.message?.includes('No intervention needed')) {
       return NextResponse.json(
         { 
           error: 'No intervention needed',
