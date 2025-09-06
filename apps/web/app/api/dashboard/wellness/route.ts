@@ -239,8 +239,8 @@ async function getLifeScoreTrends(supabase: any, userId: string) {
 function calculateImprovementRate(trends: any[]) {
   if (trends.length < 7) return 0;
 
-  const recent = trends.slice(-7).map(t => t.overall_score || 0);
-  const previous = trends.slice(-14, -7).map(t => t.overall_score || 0);
+  const recent = trends.slice(-7).map((t: any) => t.overall_score || 0);
+  const previous = trends.slice(-14, -7).map((t: any) => t.overall_score || 0);
 
   if (recent.length === 0 || previous.length === 0) return 0;
 
