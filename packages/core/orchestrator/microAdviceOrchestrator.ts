@@ -1,7 +1,7 @@
-import { EmpatheticLanguageEngine, GeneratedMessage } from './empatheticLanguageEngine';
-import { IntelligentTimingSystem, OptimalMoment, CircadianProfile } from './intelligentTimingSystem';
-import { IntelligentPushSystem } from './intelligentPushSystem';
-import { SoftGamificationSystem, StreakData, PersonalizedAchievement, CelebrationMoment } from './softGamificationSystem';
+import { EmpatheticLanguageEngine, GeneratedMessage } from '../advice/empatheticLanguageEngine';
+import { IntelligentTimingSystem, OptimalMoment, CircadianProfile } from '../advice/intelligentTimingSystem';
+import { IntelligentPushSystem } from '../advice/intelligentPushSystem';
+import { SoftGamificationSystem, StreakData, PersonalizedAchievement, CelebrationMoment } from '../advice/softGamificationSystem';
 import { HealthMetrics, LifeScoreV2, UserProfile } from '../../types';
 
 // Types for the integrated system
@@ -560,7 +560,7 @@ export class MicroAdviceOrchestrator {
     if (overall >= 5) {
       return {
         intervention_needed: true,
-        intervention_type: 'mindfulness',
+        intervention_type: 'motivation',
         urgency_level: 'low',
         reasoning: 'Good time for mindfulness practice'
       };
