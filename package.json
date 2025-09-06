@@ -42,7 +42,8 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:gen-types": "supabase gen types typescript --local > packages/types/database.types.ts",
+    "supabase:gen-types": "echo 'Skipping Supabase types generation during build - Docker not available'",
+    "supabase:gen-types:local": "supabase gen types typescript --local > packages/types/database.types.ts",
     "clean": "rm -rf .next node_modules/.cache storybook-static"
   },
   "overrides": {
