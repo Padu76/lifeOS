@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Brain, Heart, Moon, TrendingUp, Zap, Star, Users, Shield } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import Link from 'next/link';
 
 // SSR-safe scroll position hook
 const useScrollPosition = () => {
@@ -46,6 +46,17 @@ const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 
   }, [ref, threshold]);
 
   return isIntersecting;
+};
+
+// Smooth scroll utility
+const scrollToFeatures = () => {
+  const featuresSection = document.getElementById('features-section');
+  if (featuresSection) {
+    featuresSection.scrollIntoView({ 
+      behavior: 'smooth',
+      block: 'start'
+    });
+  }
 };
 
 const LifeScorePreview: React.FC = () => {
@@ -245,18 +256,18 @@ const HomePage: React.FC = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
               LifeOS
-            </div>
+            </Link>
             <div className="hidden md:flex space-x-8 text-white/80">
-              <a href="/" className="hover:text-white transition-colors">Home</a>
-              <a href="/suggestions" className="hover:text-white transition-colors">Suggestions</a>
-              <a href="/dashboard" className="hover:text-white transition-colors">Dashboard</a>
-              <a href="/profile" className="hover:text-white transition-colors">Profilo</a>
+              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+              <Link href="/suggestions" className="hover:text-white transition-colors">Suggestions</Link>
+              <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
+              <Link href="/profile" className="hover:text-white transition-colors">Profilo</Link>
             </div>
-            <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+            <Link href="/checkin" className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
               Inizia Gratis
-            </button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -287,14 +298,17 @@ const HomePage: React.FC = () => {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-            <button className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl">
+            <button 
+              onClick={scrollToFeatures}
+              className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl cursor-pointer"
+            >
               <span className="relative z-10">Scopri Come Funziona</span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </button>
             
-            <button className="border-2 border-white/30 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-lg">
+            <Link href="/dashboard" className="border-2 border-white/30 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-lg">
               Guarda Demo
-            </button>
+            </Link>
           </div>
 
           {/* LifeScore Preview */}
@@ -308,7 +322,7 @@ const HomePage: React.FC = () => {
       </section>
 
       {/* Features Section */}
-      <section className="relative py-32 px-6">
+      <section id="features-section" className="relative py-32 px-6">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
@@ -388,13 +402,13 @@ const HomePage: React.FC = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <button className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-12 py-4 rounded-full font-bold text-xl hover:scale-105 transition-all duration-300 shadow-2xl">
+            <Link href="/checkin" className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-12 py-4 rounded-full font-bold text-xl hover:scale-105 transition-all duration-300 shadow-2xl">
               <span className="relative z-10 flex items-center gap-3">
                 Inizia Gratis Ora
                 <Zap className="w-6 h-6" />
               </span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            </button>
+            </Link>
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-8 text-white/60 text-sm">
@@ -414,14 +428,14 @@ const HomePage: React.FC = () => {
       <footer className="relative bg-black/20 backdrop-blur-lg border-t border-white/10 py-12 px-6">
         <div className="container mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-4 md:mb-0">
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-4 md:mb-0">
               LifeOS
-            </div>
+            </Link>
             
             <div className="flex gap-8 text-white/60 text-sm">
-              <a href="#" className="hover:text-white transition-colors">Privacy</a>
-              <a href="#" className="hover:text-white transition-colors">Termini</a>
-              <a href="#" className="hover:text-white transition-colors">Contatti</a>
+              <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/legal/terms" className="hover:text-white transition-colors">Termini</Link>
+              <a href="mailto:support@lifeos.app" className="hover:text-white transition-colors">Contatti</a>
             </div>
           </div>
           
