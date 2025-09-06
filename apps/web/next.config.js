@@ -1,3 +1,5 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Performance optimizations
@@ -128,7 +130,5 @@ const nextConfig = {
     ];
   },
 };
-
-const path = require('path');
 
 module.exports = nextConfig;
