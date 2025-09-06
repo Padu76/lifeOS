@@ -52,8 +52,3 @@ module.exports = {
     return config;
   },
 };
-
-// Script per package.json:
-// "analyze": "ANALYZE=true npm run build"
-// "analyze:server": "ANALYZE=true npm run build && open analyze/server.html"
-// "analyze:client": "ANALYZE=true npm run build && open analyze/client.html"
