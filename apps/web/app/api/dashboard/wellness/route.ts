@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       user_id: userId
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in wellness dashboard API:', error);
     
     // Return fallback data if main system fails
