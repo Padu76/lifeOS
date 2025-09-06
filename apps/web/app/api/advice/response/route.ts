@@ -313,7 +313,7 @@ async function trackDismissalPattern(supabase: any, userId: string) {
     if (!recentSessions) return;
 
     const dismissals = recentSessions.filter(
-      session => session.user_response?.action === 'dismissed'
+      (session: any) => session.user_response?.action === 'dismissed'
     );
 
     const dismissalRate = dismissals.length / recentSessions.length;
