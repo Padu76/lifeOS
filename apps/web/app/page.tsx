@@ -2,16 +2,15 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Brain, Heart, Moon, TrendingUp, Zap, Star, Users, Shield } from 'lucide-react';
+import dynamic from 'next/dynamic';
 
-interface ScrollPosition {
-  y: number;
-  progress: number;
-}
-
+// SSR-safe scroll position hook
 const useScrollPosition = () => {
-  const [scrollPosition, setScrollPosition] = useState<ScrollPosition>({ y: 0, progress: 0 });
+  const [scrollPosition, setScrollPosition] = useState({ y: 0, progress: 0 });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleScroll = () => {
       const scrollY = window.scrollY;
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
@@ -27,10 +26,13 @@ const useScrollPosition = () => {
   return scrollPosition;
 };
 
+// SSR-safe intersection observer hook
 const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 0.1) => {
   const [isIntersecting, setIsIntersecting] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const element = ref.current;
     if (!element) return;
 
@@ -49,8 +51,19 @@ const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 
 const LifeScorePreview: React.FC = () => {
   const [score, setScore] = useState(87);
   const [hovering, setHovering] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const circleRef = useRef<HTMLDivElement>(null);
   const isVisible = useIntersectionObserver(circleRef);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="w-64 h-64 mx-auto bg-white/10 rounded-full animate-pulse" />
+    );
+  }
 
   const circumference = 2 * Math.PI * 60;
   const strokeDasharray = circumference;
@@ -159,11 +172,16 @@ const FeatureCard: React.FC<{
 };
 
 const HomePage: React.FC = () => {
-  const { y: scrollY, progress } = useScrollPosition();
+  const { y: scrollY } = useScrollPosition();
   const heroRef = useRef<HTMLDivElement>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    
+    if (typeof window === 'undefined') return;
+    
     const handleMouseMove = (e: MouseEvent) => {
       setMousePosition({ x: e.clientX, y: e.clientY });
     };
@@ -172,11 +190,15 @@ const HomePage: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Parallax calculations
-  const heroTransform = `translateY(${scrollY * 0.5}px)`;
-  const bgTransform = `translateY(${scrollY * 0.3}px)`;
-  const mouseParallaxX = (mousePosition.x - window.innerWidth / 2) * 0.01;
-  const mouseParallaxY = (mousePosition.y - window.innerHeight / 2) * 0.01;
+  // Only apply transforms after mount to avoid hydration mismatch
+  const heroTransform = mounted ? `translateY(${scrollY * 0.5}px)` : 'translateY(0px)';
+  const bgTransform = mounted ? `translateY(${scrollY * 0.3}px)` : 'translateY(0px)';
+  const mouseParallaxX = mounted && typeof window !== 'undefined' 
+    ? (mousePosition.x - window.innerWidth / 2) * 0.01 
+    : 0;
+  const mouseParallaxY = mounted && typeof window !== 'undefined'
+    ? (mousePosition.y - window.innerHeight / 2) * 0.01 
+    : 0;
 
   return (
     <div className="min-h-screen overflow-x-hidden">
@@ -185,35 +207,39 @@ const HomePage: React.FC = () => {
         className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900"
         style={{
           transform: bgTransform,
-          background: `
-            radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, 
-              rgba(147, 197, 253, 0.1) 0%, 
-              transparent 50%),
-            linear-gradient(135deg, 
-              #0f172a 0%, 
-              #1e1b4b 25%, 
-              #312e81 50%, 
-              #1e1b4b 75%, 
-              #0f172a 100%)
-          `
+          background: mounted 
+            ? `
+              radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, 
+                rgba(147, 197, 253, 0.1) 0%, 
+                transparent 50%),
+              linear-gradient(135deg, 
+                #0f172a 0%, 
+                #1e1b4b 25%, 
+                #312e81 50%, 
+                #1e1b4b 75%, 
+                #0f172a 100%)
+            `
+            : 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #312e81 50%, #1e1b4b 75%, #0f172a 100%)'
         }}
       />
 
       {/* Animated Background Elements */}
-      <div className="fixed inset-0 pointer-events-none">
-        {[...Array(20)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-white rounded-full opacity-30"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 3}s`,
-              animation: `twinkle 3s infinite ease-in-out`
-            }}
-          />
-        ))}
-      </div>
+      {mounted && (
+        <div className="fixed inset-0 pointer-events-none">
+          {[...Array(20)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full opacity-30 animate-pulse"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 3}s`,
+                animationDuration: '3s'
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
@@ -223,10 +249,10 @@ const HomePage: React.FC = () => {
               LifeOS
             </div>
             <div className="hidden md:flex space-x-8 text-white/80">
-              <a href="#" className="hover:text-white transition-colors">Home</a>
-              <a href="#" className="hover:text-white transition-colors">Suggestions</a>
-              <a href="#" className="hover:text-white transition-colors">Dashboard</a>
-              <a href="#" className="hover:text-white transition-colors">Profilo</a>
+              <a href="/" className="hover:text-white transition-colors">Home</a>
+              <a href="/suggestions" className="hover:text-white transition-colors">Suggestions</a>
+              <a href="/dashboard" className="hover:text-white transition-colors">Dashboard</a>
+              <a href="/profile" className="hover:text-white transition-colors">Profilo</a>
             </div>
             <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
               Inizia Gratis
@@ -404,13 +430,6 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </footer>
-
-      <style jsx>{`
-        @keyframes twinkle {
-          0%, 100% { opacity: 0.3; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.2); }
-        }
-      `}</style>
     </div>
   );
 };
