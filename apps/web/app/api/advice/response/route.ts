@@ -229,7 +229,7 @@ async function updateUserStreaks(supabase: any, userId: string) {
     }
 
     // Calculate max streak
-    maxStreak = Math.max(currentStreak, ...completions.map((_, i) => i + 1));
+    maxStreak = Math.max(currentStreak, ...completions.map((_: any, i: number) => i + 1));
 
     // Update streak record
     const streakData = {
