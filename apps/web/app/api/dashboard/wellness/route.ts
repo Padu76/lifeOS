@@ -197,7 +197,7 @@ async function getCompletionStatistics(supabase: any, userId: string) {
       .filter(day => new Date(day.date) >= sevenDaysAgo)
       .reduce((sum, day) => sum + day.completed_count, 0);
 
-    const daysWithActivity = (dailyCompletions || []).filter(day => day.completed_count > 0).length;
+    const daysWithActivity = (dailyCompletions || []).filter((day: any) => day.completed_count > 0).length;
     const totalDays = Math.min(30, dailyCompletions?.length || 0);
     const rate = totalDays > 0 ? daysWithActivity / totalDays : 0;
 
