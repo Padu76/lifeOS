@@ -31,6 +31,12 @@
     "clean": "rm -rf .next node_modules/.cache",
     "postinstall": "npm run supabase:gen-types"
   },
+  "overrides": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
@@ -54,7 +60,7 @@
     "@storybook/nextjs": "^7.5.0",
     "@storybook/react": "^7.5.0",
     "@storybook/testing-library": "^0.2.2",
-    "eslint-plugin-storybook": "^0.6.15",
+    "eslint-plugin-storybook": "^0.8.0",
     "jest-environment-jsdom": "^29.7.0",
     "storybook": "^7.5.0",
     "supabase": "^1.110.0"
