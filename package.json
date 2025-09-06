@@ -1,34 +1,35 @@
 {
   "name": "lifeos",
+  "version": "1.0.0",
+  "description": "LifeOS - AI-powered personal wellness platform",
+  "main": "index.js",
   "private": true,
-  "version": "0.0.1",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "dev:mobile": "npm --workspace apps/mobile run start",
-    "dev:web": "npm --workspace apps/web run dev",
-    "build:web": "npm --workspace apps/web run build",
-    "build:mobile": "npm --workspace apps/mobile run build",
-    "build:all": "npm run build:web && npm run build:mobile",
-    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
-    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
+    "lint:check": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "format:fix": "prettier --write .",
     "type-check": "tsc --noEmit",
-    "test:unit": "jest --config jest.unit.config.js",
-    "test:integration": "jest --config jest.integration.config.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:staging": "PLAYWRIGHT_BASE_URL=staging playwright test",
-    "check-deps": "node scripts/check-dependencies.js",
-    "verify-exports": "node scripts/verify-exports.js",
-    "changelog:generate": "conventional-changelog -p angular -i CHANGELOG.md -s",
-    "analyze": "ANALYZE=true npm run build:web",
-    "analyze:server": "ANALYZE=true npm run build:web && open apps/web/analyze/server.html",
-    "analyze:client": "ANALYZE=true npm run build:web && open apps/web/analyze/client.html",
-    "perf:lighthouse": "lhci autorun",
-    "perf:monitor": "node scripts/performance-check.js"
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:gen-types": "supabase gen types typescript --local > types/database.types.ts",
+    "validate": "npm run lint:check && npm run format:check && npm run type-check",
+    "clean": "rm -rf .next node_modules/.cache",
+    "postinstall": "npm run supabase:gen-types"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.0.0",
@@ -42,6 +43,43 @@
     "@playwright/test": "^1.40.0",
     "conventional-changelog-cli": "^4.1.0",
     "webpack-bundle-analyzer": "^4.9.0",
-    "@lhci/cli": "^0.12.0"
-  }
+    "@lhci/cli": "^0.12.0",
+    
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
+    "@storybook/addon-essentials": "^7.5.0",
+    "@storybook/addon-interactions": "^7.5.0",
+    "@storybook/addon-links": "^7.5.0",
+    "@storybook/blocks": "^7.5.0",
+    "@storybook/nextjs": "^7.5.0",
+    "@storybook/react": "^7.5.0",
+    "@storybook/testing-library": "^0.2.2",
+    "eslint-plugin-storybook": "^0.6.15",
+    "jest-environment-jsdom": "^29.7.0",
+    "storybook": "^7.5.0",
+    "supabase": "^1.110.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Padu76/lifeOS.git"
+  },
+  "keywords": [
+    "wellness",
+    "ai",
+    "health",
+    "productivity",
+    "nextjs",
+    "react-native",
+    "supabase"
+  ],
+  "author": "Padu76",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Padu76/lifeOS/issues"
+  },
+  "homepage": "https://github.com/Padu76/lifeOS#readme"
 }
