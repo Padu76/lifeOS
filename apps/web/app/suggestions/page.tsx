@@ -308,7 +308,7 @@ const SuggestionsPage: React.FC = () => {
       const response = await fetch('/api/dashboard/wellness');
       if (response.ok) {
         const data = await response.json();
-        setDashboard(data);
+        setDashboard(data.data); // Fix: accesso a data.data invece di data direttamente
       }
     } catch (err) {
       console.error('Error loading dashboard:', err);
@@ -443,7 +443,7 @@ const SuggestionsPage: React.FC = () => {
             </p>
           </div>
 
-          {/* AI-Enhanced Stats */}
+          {/* AI-Enhanced Stats - FIX: Safe data access con optional chaining */}
           <div className="grid md:grid-cols-4 gap-6 mb-12">
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 text-center">
               <div className="text-3xl font-bold text-white mb-2">{activeSuggestions.length}</div>
@@ -455,7 +455,7 @@ const SuggestionsPage: React.FC = () => {
             </div>
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 text-center">
               <div className="text-3xl font-bold text-blue-400 mb-2">
-                {dashboard?.current_life_score.overall || '--'}
+                {dashboard?.current_life_score?.overall || '--'}
               </div>
               <div className="text-white/70">LifeScore attuale</div>
             </div>
@@ -467,7 +467,7 @@ const SuggestionsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* AI Insights */}
+          {/* AI Insights - FIX: Safe data access */}
           {dashboard?.wellness_insights && dashboard.wellness_insights.length > 0 && (
             <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 backdrop-blur-lg rounded-2xl p-6 border border-cyan-500/30 mb-12">
               <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
