@@ -2,6 +2,8 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Brain, Clock, Star, Play, CheckCircle, ArrowRight, Zap, Heart, Moon } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Suggestion {
   id: string;
@@ -10,6 +12,7 @@ interface Suggestion {
   category: 'stress' | 'energy' | 'sleep' | 'focus';
   duration: number;
   priority: 'high' | 'medium' | 'low';
+  key: string; // Added key for navigation
   completed?: boolean;
 }
 
@@ -37,7 +40,7 @@ const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 
 const SuggestionCard: React.FC<{
   suggestion: Suggestion;
   delay: number;
-  onStart: (id: string) => void;
+  onStart: (key: string) => void;
   onComplete: (id: string) => void;
 }> = ({ suggestion, delay, onStart, onComplete }) => {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -113,7 +116,7 @@ const SuggestionCard: React.FC<{
         {!suggestion.completed ? (
           <>
             <button
-              onClick={() => onStart(suggestion.id)}
+              onClick={() => onStart(suggestion.key)}
               className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:scale-105 transition-transform flex items-center justify-center gap-2"
             >
               <Play className="w-4 h-4" />
@@ -141,6 +144,7 @@ const SuggestionCard: React.FC<{
 };
 
 const SuggestionsPage: React.FC = () => {
+  const router = useRouter();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([
     {
       id: '1',
@@ -148,7 +152,8 @@ const SuggestionsPage: React.FC = () => {
       description: 'Una tecnica di respirazione per ridurre lo stress e migliorare la concentrazione. Inspira per 4, trattieni per 7, espira per 8.',
       category: 'stress',
       duration: 5,
-      priority: 'high'
+      priority: 'high',
+      key: 'breathing-478'
     },
     {
       id: '2',
@@ -156,7 +161,8 @@ const SuggestionsPage: React.FC = () => {
       description: 'Una breve camminata all\'aria aperta per aumentare i livelli di energia e migliorare l\'umore.',
       category: 'energy',
       duration: 15,
-      priority: 'medium'
+      priority: 'medium',
+      key: '10min-walk'
     },
     {
       id: '3',
@@ -164,7 +170,8 @@ const SuggestionsPage: React.FC = () => {
       description: 'Una sessione di mindfulness per rilassare la mente e preparare il corpo al riposo notturno.',
       category: 'sleep',
       duration: 10,
-      priority: 'high'
+      priority: 'high',
+      key: '5min-meditation'
     },
     {
       id: '4',
@@ -172,7 +179,8 @@ const SuggestionsPage: React.FC = () => {
       description: 'Esercizi di allungamento dolci per rilassare i muscoli e ridurre la tensione accumulata.',
       category: 'stress',
       duration: 8,
-      priority: 'low'
+      priority: 'low',
+      key: 'stretching-routine'
     },
     {
       id: '5',
@@ -180,7 +188,8 @@ const SuggestionsPage: React.FC = () => {
       description: 'Sessione di lavoro focalizzato di 25 minuti seguita da una pausa di 5 minuti per migliorare la produttività.',
       category: 'focus',
       duration: 25,
-      priority: 'medium'
+      priority: 'medium',
+      key: 'pomodoro-technique'
     },
     {
       id: '6',
@@ -188,7 +197,8 @@ const SuggestionsPage: React.FC = () => {
       description: 'Bevi lentamente un bicchiere d\'acqua prestando attenzione alle sensazioni e al momento presente.',
       category: 'energy',
       duration: 3,
-      priority: 'low'
+      priority: 'low',
+      key: 'mindful-hydration'
     }
   ]);
 
@@ -208,9 +218,9 @@ const SuggestionsPage: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  const handleStart = (id: string) => {
-    console.log('Starting suggestion:', id);
-    // Navigate to tutorial or start session
+  const handleStart = (key: string) => {
+    // Navigate to the specific tutorial page
+    router.push(`/suggestions/${key}`);
   };
 
   const handleComplete = (id: string) => {
@@ -248,18 +258,18 @@ const SuggestionsPage: React.FC = () => {
       <nav className="relative z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
               LifeOS
-            </div>
+            </Link>
             <div className="hidden md:flex space-x-8 text-white/80">
-              <a href="/" className="hover:text-white transition-colors">Home</a>
-              <a href="/suggestions" className="text-white font-semibold">Suggestions</a>
-              <a href="/dashboard" className="hover:text-white transition-colors">Dashboard</a>
-              <a href="/profile" className="hover:text-white transition-colors">Profilo</a>
+              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+              <Link href="/suggestions" className="text-white font-semibold">Suggestions</Link>
+              <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
+              <Link href="/profile" className="hover:text-white transition-colors">Profilo</Link>
             </div>
-            <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
-              Logout
-            </button>
+            <Link href="/sign-in" className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+              Accedi
+            </Link>
           </div>
         </div>
       </nav>
@@ -355,13 +365,13 @@ const SuggestionsPage: React.FC = () => {
             <p className="text-xl text-white/70 mb-8">
               Controlla la tua dashboard per vedere i progressi e ottenere nuovi consigli personalizzati
             </p>
-            <a 
+            <Link 
               href="/dashboard"
               className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform"
             >
               Vai alla Dashboard
               <ArrowRight className="w-5 h-5" />
-            </a>
+            </Link>
           </div>
         </div>
       </section>
