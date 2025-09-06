@@ -132,7 +132,7 @@ async function getActiveStreaks(supabase: any, userId: string) {
       .eq('user_id', userId)
       .gt('current_count', 0);
 
-    return (streaks || []).map(streak => ({
+    return (streaks || []).map((streak: any) => ({
       type: streak.streak_type,
       current_count: streak.current_count,
       best_count: streak.best_count,
