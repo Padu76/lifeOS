@@ -219,7 +219,7 @@ async function getCurrentUserLifeScore(supabase: any, userId: string): Promise<L
 }
 
 // Helper function to calculate LifeScore from metrics
-function calculateLifeScoreFromMetrics(metrics: HealthMetrics): LifeScoreV2 {
+function calculateLifeScoreFromMetrics(metrics: HealthMetrics): LifeScore {
   // Simple calculation - in production this would use the core LifeScore algorithm
   const stressScore = Math.max(1, Math.min(10, 11 - (metrics.stress_level || 5)));
   const energyScore = Math.max(1, Math.min(10, metrics.energy_level || 5));
