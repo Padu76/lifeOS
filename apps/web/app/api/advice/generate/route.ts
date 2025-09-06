@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { MicroAdviceOrchestrator } from '@lifeos/core/orchestrator/microAdviceOrchestrator';
-import { HealthMetrics, LifeScoreV2 } from '@lifeos/types';
+import { HealthMetrics, LifeScore } from '@lifeos/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -177,7 +177,7 @@ async function getCurrentUserMetrics(supabase: any, userId: string): Promise<Hea
 }
 
 // Helper function to get current user LifeScore
-async function getCurrentUserLifeScore(supabase: any, userId: string): Promise<LifeScoreV2> {
+async function getCurrentUserLifeScore(supabase: any, userId: string): Promise<LifeScore> {
   try {
     // Get today's LifeScore
     const today = new Date().toISOString().split('T')[0];
