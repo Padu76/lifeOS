@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { MicroAdviceOrchestrator } from '../../../../packages/core/orchestrator/microAdviceOrchestrator';
+import { MicroAdviceOrchestrator } from '@lifeos/core/orchestrator/microAdviceOrchestrator';
 
 export async function GET(request: NextRequest) {
   try {
