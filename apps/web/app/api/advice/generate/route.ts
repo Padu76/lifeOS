@@ -158,10 +158,12 @@ async function getCurrentHealthMetrics(supabase: any, userId: string) {
         user_id: userId,
         date: today,
         sleep_hours: metrics.sleep_hours || 7,
+        sleep_quality: metrics.sleep_quality || 3,
         steps: metrics.steps || 5000,
         mood: metrics.mood || 3,
         stress: metrics.stress || 3,
-        energy: metrics.energy || 3
+        energy: metrics.energy || 3,
+        source: metrics.source || 'manual' as const
       };
     }
 
@@ -178,10 +180,12 @@ async function getCurrentHealthMetrics(supabase: any, userId: string) {
         user_id: userId,
         date: today,
         sleep_hours: (lifeScore.sleep_score || 5) * 1.6, // Convert 1-10 to hours
+        sleep_quality: Math.round((lifeScore.sleep_score || 5) / 2), // Convert to 1-5 scale
         steps: (lifeScore.activity_score || 5) * 1000, // Rough conversion
         mood: lifeScore.mental_score || 3,
         stress: 10 - (lifeScore.mental_score || 5), // Inverse relationship
-        energy: lifeScore.activity_score || 3
+        energy: lifeScore.activity_score || 3,
+        source: 'computed' as const
       };
     }
 
