@@ -497,8 +497,8 @@ export class MicroAdviceOrchestrator {
 
     const { score: overall, breakdown } = lifeScore;
     const stress = metrics.stress || 5;
-    const energy = breakdown?.energy || 50;
-    const sleep = breakdown?.sleep || 50;
+    const energy = breakdown?.activity_score || 50;
+    const sleep = breakdown?.sleep_score || 50;
     
     // Emergency situations
     if (stress >= 9 || overall <= 20) {
