@@ -554,7 +554,7 @@ export class MicroAdviceOrchestrator {
     if (timeSinceLastMs < minGapMs) {
       return {
         intervention_needed: false,
-        intervention_type: 'none',
+        intervention_type: 'motivation',
         urgency_level: 'low',
         reasoning: 'Too soon since last intervention'
       };
@@ -572,7 +572,7 @@ export class MicroAdviceOrchestrator {
 
     return {
       intervention_needed: false,
-      intervention_type: 'none',
+      intervention_type: 'motivation',
       urgency_level: 'low',
       reasoning: 'No intervention needed at this time'
     };
