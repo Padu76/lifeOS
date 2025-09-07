@@ -43,6 +43,7 @@ export class LifeScoreV2Calculator {
    * Calcola LifeScore avanzato con machine learning
    */
   static async calculateAdvancedLifeScore(
+    userId: string,
     metrics: HealthMetrics,
     historicalData: HealthMetrics[],
     userProfile?: UserProfile,
@@ -50,7 +51,7 @@ export class LifeScoreV2Calculator {
   ): Promise<AdvancedLifeScore> {
     
     // 1. Calcola baseline personale se non esiste
-    const profile = userProfile || this.generateUserProfile(metrics.user_id, historicalData);
+    const profile = userProfile || this.generateUserProfile(userId, historicalData);
     
     // 2. Calcola pesi adattivi basati su correlazioni personali
     const adaptiveWeights = this.calculateAdaptiveWeights(historicalData, previousScores, profile);
