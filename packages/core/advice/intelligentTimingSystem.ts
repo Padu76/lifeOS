@@ -1,5 +1,5 @@
-import { HealthMetrics, LifeScore, UserProfile } from '../../types';
-import { AdvancedLifeScore } from '../scoring/lifeScoreV2';
+import { HealthMetrics, LifeScore } from '../../types';
+import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 
 // Types for intelligent timing system
 export interface CircadianProfile {
@@ -153,7 +153,7 @@ export class IntelligentTimingSystem {
       intervention_type: interventionType,
       reasoning,
       alternative_times: alternatives,
-      urgency_level
+      urgency_level: urgencyLevel
     };
   }
 
