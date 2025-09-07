@@ -1,4 +1,5 @@
-import { HealthMetrics, LifeScore, UserProfile } from '../../types';
+import { HealthMetrics, LifeScore } from '../../types';
+import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 
 // Types for empathic language system
 interface EmpatheticContext {
@@ -395,7 +396,7 @@ export class EmpatheticLanguageEngine {
 
   // Method to analyze emotional state from LifeScore data
   analyzeEmotionalState(
-    lifeScore: LifeScore,
+    lifeScore: AdvancedLifeScore,
     metrics: HealthMetrics
   ): EmpatheticContext['emotional_state'] {
     const { stress, energy, sleep, overall } = lifeScore;
