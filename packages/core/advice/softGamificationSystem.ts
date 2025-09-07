@@ -246,7 +246,7 @@ export class SoftGamificationSystem {
       message: '',
       tone: '',
       focus: '',
-      encouragement_type: 'gentle' as const
+      encouragement_type: 'gentle' as 'gentle' | 'warm' | 'proud' | 'understanding'
     };
 
     // Adapt feedback based on trend and context
