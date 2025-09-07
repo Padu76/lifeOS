@@ -1,662 +1,638 @@
-import { EmpatheticLanguageEngine, GeneratedMessage } from './empatheticLanguageEngine';
-import { IntelligentTimingSystem, OptimalMoment, CircadianProfile } from './intelligentTimingSystem';
-import { HealthMetrics } from '../../types';
+import { HealthMetrics, LifeScore } from '../../types';
 import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 
-// Types for intelligent push notification system
-interface NotificationPreferences {
-  enabled: boolean;
-  categories: {
-    stress_relief: boolean;
-    energy_boost: boolean;
-    sleep_prep: boolean;
-    celebration: boolean;
-    emergency: boolean;
-  };
-  quiet_hours: {
-    enabled: boolean;
-    start_time: string; // HH:MM
-    end_time: string; // HH:MM
-  };
-  frequency_limits: {
-    max_daily: number;
-    min_gap_minutes: number;
-    respect_dnd: boolean;
-  };
-  delivery_channels: {
-    push_notifications: boolean;
-    in_app_only: boolean;
-    email_backup: boolean;
-  };
-  tone_preference: 'gentle' | 'encouraging' | 'casual' | 'formal' | 'adaptive';
+// Types for intelligent timing system
+export interface CircadianProfile {
+  chronotype: 'early_bird' | 'night_owl' | 'intermediate';
+  natural_wake_time: string; // HH:MM format
+  natural_sleep_time: string; // HH:MM format
+  peak_energy_hours: number[]; // Hours of day (0-23)
+  low_energy_hours: number[]; // Hours of day (0-23)
+  stress_peak_hours: number[]; // When stress typically peaks
+  optimal_intervention_windows: TimeWindow[];
 }
 
-interface PushNotificationPayload {
-  title: string;
-  body: string;
-  data: {
-    type: 'micro_advice';
-    advice_id: string;
-    category: string;
-    action_required: boolean;
-    deep_link: string;
-    priority: 'low' | 'normal' | 'high' | 'emergency';
+export interface TimeWindow {
+  start_hour: number;
+  end_hour: number;
+  effectiveness_score: number;
+  intervention_type: 'stress_relief' | 'energy_boost' | 'mindfulness' | 'celebration';
+  frequency_limit: number; // Max interventions in this window per day
+}
+
+export interface TimingContext {
+  current_time: Date;
+  user_timezone: string;
+  day_of_week: number; // 0 = Sunday
+  is_working_day: boolean;
+  predicted_availability: number; // 0-1 score
+  recent_activity_level: 'low' | 'medium' | 'high';
+  time_since_last_intervention: number; // Minutes
+  current_stress_trend: 'rising' | 'stable' | 'declining';
+}
+
+export interface OptimalMoment {
+  suggested_time: Date;
+  confidence_score: number; // 0-1
+  intervention_type: string;
+  reasoning: string;
+  alternative_times: Date[];
+  urgency_level: 'low' | 'medium' | 'high' | 'emergency';
+}
+
+export interface PatternLearning {
+  response_rates_by_hour: Record<number, number>;
+  completion_rates_by_day: Record<number, number>;
+  effectiveness_by_context: Record<string, number>;
+  burnout_indicators: {
+    consecutive_dismissals: number;
+    declining_engagement: boolean;
+    fatigue_score: number;
   };
-  actions?: NotificationAction[];
-  badge?: number;
-  sound?: string;
-  image?: string;
 }
 
-interface NotificationAction {
-  id: string;
-  title: string;
-  icon?: string;
-  type: 'complete' | 'snooze' | 'dismiss' | 'view';
-}
+export class IntelligentTimingSystem {
+  private readonly MAX_DAILY_INTERVENTIONS = 5;
+  private readonly MIN_INTERVENTION_GAP_MINUTES = 90;
+  private readonly PEAK_EFFECTIVENESS_THRESHOLD = 0.75;
 
-interface DeliveryContext {
-  device_type: 'ios' | 'android' | 'web';
-  app_state: 'foreground' | 'background' | 'inactive';
-  device_settings: {
-    notifications_enabled: boolean;
-    dnd_active: boolean;
-    battery_level?: number;
-  };
-  network_status: 'online' | 'offline' | 'poor';
-  user_activity: 'active' | 'idle' | 'driving' | 'meeting';
-}
+  // Analyze user's circadian patterns from historical data
+  analyzeCircadianProfile(
+    historicalMetrics: HealthMetrics[],
+    userProfile: UserProfile
+  ): CircadianProfile {
+    const sleepData = this.extractSleepPatterns(historicalMetrics);
+    const energyData = this.extractEnergyPatterns(historicalMetrics);
+    const stressData = this.extractStressPatterns(historicalMetrics);
 
-interface NotificationResult {
-  id: string;
-  scheduled_time: Date;
-  delivered_time?: Date;
-  status: 'scheduled' | 'delivered' | 'failed' | 'cancelled';
-  user_action?: 'opened' | 'dismissed' | 'completed' | 'snoozed';
-  engagement_score: number;
-  delivery_context: DeliveryContext;
-}
+    // Determine chronotype based on sleep patterns
+    const avgBedtime = this.calculateAverageTime(sleepData.bedtimes);
+    const avgWakeTime = this.calculateAverageTime(sleepData.waketimes);
+    const chronotype = this.determineChronotype(avgBedtime, avgWakeTime);
 
-interface NotificationAnalytics {
-  delivery_rate: number;
-  open_rate: number;
-  completion_rate: number;
-  optimal_timing_accuracy: number;
-  user_satisfaction_score: number;
-  burnout_risk_score: number;
-}
+    // Find peak energy and stress hours
+    const peakEnergyHours = this.findPeakHours(energyData, 'high');
+    const lowEnergyHours = this.findPeakHours(energyData, 'low');
+    const stressPeakHours = this.findPeakHours(stressData, 'high');
 
-export class IntelligentPushSystem {
-  private languageEngine: EmpatheticLanguageEngine;
-  private timingSystem: IntelligentTimingSystem;
-  private scheduledNotifications: Map<string, NodeJS.Timeout> = new Map();
-  
-  constructor() {
-    this.languageEngine = new EmpatheticLanguageEngine();
-    this.timingSystem = new IntelligentTimingSystem();
+    // Generate optimal intervention windows
+    const optimalWindows = this.generateOptimalWindows(
+      chronotype,
+      peakEnergyHours,
+      lowEnergyHours,
+      stressPeakHours
+    );
+
+    return {
+      chronotype,
+      natural_wake_time: avgWakeTime,
+      natural_sleep_time: avgBedtime,
+      peak_energy_hours: peakEnergyHours,
+      low_energy_hours: lowEnergyHours,
+      stress_peak_hours: stressPeakHours,
+      optimal_intervention_windows: optimalWindows
+    };
   }
 
-  // Schedule intelligent micro-advice notification
-  async scheduleAdviceNotification(
-    userId: string,
-    lifeScore: AdvancedLifeScore,
-    metrics: HealthMetrics,
-    userProfile: UserProfile,
-    preferences: NotificationPreferences,
-    circadianProfile: CircadianProfile
-  ): Promise<{ notificationId: string; scheduledTime: Date; confidence: number }> {
+  // Predict optimal moment for intervention
+  predictOptimalMoment(
+    context: TimingContext,
+    circadianProfile: CircadianProfile,
+    currentLifeScore: AdvancedLifeScore,
+    interventionType: string,
+    patternLearning: PatternLearning
+  ): OptimalMoment {
+    const currentHour = context.current_time.getHours();
+    const urgencyLevel = this.assessUrgencyLevel(currentLifeScore, context);
     
-    // Check if notifications are enabled and not in burnout state
-    if (!preferences.enabled || !this.canSendNotification(userId, preferences)) {
-      throw new Error('Notifications disabled or user in cooldown period');
+    // Check if immediate intervention is needed (emergency)
+    if (urgencyLevel === 'emergency') {
+      return {
+        suggested_time: context.current_time,
+        confidence_score: 0.95,
+        intervention_type: interventionType,
+        reasoning: 'Emergency intervention needed - high stress/low wellbeing detected',
+        alternative_times: [],
+        urgency_level: 'emergency'
+      };
     }
 
-    // Determine intervention type based on current state
-    const interventionType = this.determineInterventionType(lifeScore, metrics);
-    
-    // Check category preferences
-    if (!preferences.categories[interventionType as keyof typeof preferences.categories]) {
-      throw new Error(`Category ${interventionType} disabled in user preferences`);
+    // Find optimal window for this intervention type
+    const relevantWindows = circadianProfile.optimal_intervention_windows
+      .filter(w => w.intervention_type === interventionType || w.intervention_type === 'mindfulness');
+
+    let bestMoment: Date = context.current_time;
+    let bestScore = 0;
+    let reasoning = '';
+
+    for (const window of relevantWindows) {
+      const windowScore = this.calculateWindowScore(
+        window,
+        context,
+        patternLearning,
+        urgencyLevel
+      );
+
+      if (windowScore > bestScore) {
+        bestScore = windowScore;
+        bestMoment = this.findNextTimeInWindow(window, context.current_time);
+        reasoning = this.generateReasoningForWindow(window, windowScore);
+      }
     }
 
-    // Find optimal timing
-    const context = await this.buildTimingContext(userId);
-    const patternLearning = await this.getUserPatternLearning(userId);
-    
-    const optimalMoment = this.timingSystem.predictOptimalMoment(
-      context,
+    // Generate alternative times
+    const alternatives = this.generateAlternativeTimes(
+      bestMoment,
       circadianProfile,
-      lifeScore,
-      interventionType,
+      context
+    );
+
+    return {
+      suggested_time: bestMoment,
+      confidence_score: bestScore,
+      intervention_type: interventionType,
+      reasoning,
+      alternative_times: alternatives,
+      urgency_level
+    };
+  }
+
+  // Check if now is a good time for intervention
+  isOptimalTimeForIntervention(
+    context: TimingContext,
+    circadianProfile: CircadianProfile,
+    patternLearning: PatternLearning,
+    interventionType: string
+  ): { isOptimal: boolean; score: number; reasoning: string } {
+    const currentHour = context.current_time.getHours();
+    
+    // Check basic constraints
+    if (context.time_since_last_intervention < this.MIN_INTERVENTION_GAP_MINUTES) {
+      return {
+        isOptimal: false,
+        score: 0,
+        reasoning: 'Too soon since last intervention'
+      };
+    }
+
+    // Check daily limit
+    if (this.hasReachedDailyLimit(context, patternLearning)) {
+      return {
+        isOptimal: false,
+        score: 0,
+        reasoning: 'Daily intervention limit reached'
+      };
+    }
+
+    // Check if in optimal window
+    const relevantWindow = circadianProfile.optimal_intervention_windows
+      .find(w => 
+        currentHour >= w.start_hour && 
+        currentHour <= w.end_hour &&
+        (w.intervention_type === interventionType || w.intervention_type === 'mindfulness')
+      );
+
+    if (!relevantWindow) {
+      return {
+        isOptimal: false,
+        score: 0.2,
+        reasoning: 'Outside optimal intervention windows'
+      };
+    }
+
+    // Calculate comprehensive score
+    const score = this.calculateCurrentMomentScore(
+      context,
+      relevantWindow,
       patternLearning
     );
 
-    // Check if timing respects quiet hours
-    if (!this.respectsQuietHours(optimalMoment.suggested_time, preferences.quiet_hours)) {
-      // Find next available time outside quiet hours
-      optimalMoment.suggested_time = this.findNextAvailableTime(
-        optimalMoment.suggested_time,
-        preferences.quiet_hours
-      );
-    }
-
-    // Generate empathetic message
-    const message = this.languageEngine.generateMessage(
-      this.buildEmpatheticContext(lifeScore, metrics, userProfile, preferences),
-      interventionType as any,
-      userProfile
-    );
-
-    // Create push notification payload
-    const payload = this.createNotificationPayload(
-      message,
-      interventionType,
-      optimalMoment.urgency_level
-    );
-
-    // Schedule the notification
-    const notificationId = await this.scheduleNotification(
-      userId,
-      payload,
-      optimalMoment.suggested_time,
-      preferences
-    );
+    const isOptimal = score >= this.PEAK_EFFECTIVENESS_THRESHOLD;
 
     return {
-      notificationId,
-      scheduledTime: optimalMoment.suggested_time,
-      confidence: optimalMoment.confidence_score
+      isOptimal,
+      score,
+      reasoning: isOptimal ? 
+        `Optimal timing (score: ${score.toFixed(2)}) - ${this.generateReasoningForWindow(relevantWindow, score)}` :
+        `Suboptimal timing (score: ${score.toFixed(2)}) - consider waiting`
     };
   }
 
-  // Send immediate notification (for emergency situations)
-  async sendImmediateNotification(
-    userId: string,
-    message: GeneratedMessage,
-    urgencyLevel: 'high' | 'emergency',
-    preferences: NotificationPreferences
-  ): Promise<string> {
-    
-    const payload = this.createNotificationPayload(
-      message,
-      'stress_relief', // Emergency interventions are typically stress relief
-      urgencyLevel
-    );
-
-    // Override quiet hours for emergency
-    const effectivePreferences = urgencyLevel === 'emergency' ? 
-      { ...preferences, quiet_hours: { ...preferences.quiet_hours, enabled: false } } :
-      preferences;
-
-    return await this.sendNotification(userId, payload, effectivePreferences);
-  }
-
-  // Handle user interaction with notification
-  async handleNotificationAction(
-    notificationId: string,
-    userId: string,
-    action: 'opened' | 'completed' | 'snoozed' | 'dismissed',
-    snoozeMinutes?: number
-  ): Promise<void> {
-    
-    // Record user response for learning
-    await this.recordUserResponse(notificationId, userId, action);
-
-    switch (action) {
-      case 'snoozed':
-        if (snoozeMinutes) {
-          await this.snoozeNotification(notificationId, userId, snoozeMinutes);
-        }
-        break;
-      
-      case 'completed':
-        await this.markAdviceCompleted(notificationId, userId);
-        await this.triggerPositiveReinforcement(userId);
-        break;
-      
-      case 'dismissed':
-        await this.handleDismissal(notificationId, userId);
-        break;
-      
-      case 'opened':
-        await this.trackEngagement(notificationId, userId);
-        break;
-    }
-  }
-
-  // Snooze notification for specified time
-  private async snoozeNotification(
-    notificationId: string,
-    userId: string,
-    snoozeMinutes: number
-  ): Promise<void> {
-    
-    // Cancel current notification if still scheduled
-    this.cancelScheduledNotification(notificationId);
-
-    // Get original notification data
-    const originalNotification = await this.getNotificationData(notificationId);
-    
-    if (originalNotification) {
-      // Reschedule for snooze time
-      const newTime = new Date(Date.now() + snoozeMinutes * 60 * 1000);
-      
-      await this.scheduleNotification(
-        userId,
-        originalNotification.payload,
-        newTime,
-        await this.getUserPreferences(userId),
-        `${notificationId}_snoozed`
-      );
-    }
-  }
-
-  // Create notification payload with appropriate formatting
-  private createNotificationPayload(
-    message: GeneratedMessage,
+  // Learn from user responses to improve timing
+  recordInterventionResponse(
+    interventionTime: Date,
     interventionType: string,
-    urgencyLevel: string
-  ): PushNotificationPayload {
-    
-    const title = this.generateNotificationTitle(interventionType, urgencyLevel);
-    const actions = this.createNotificationActions(interventionType);
+    userResponse: 'completed' | 'dismissed' | 'snoozed',
+    completionTime?: Date,
+    userRating?: number
+  ): Partial<PatternLearning> {
+    const hour = interventionTime.getHours();
+    const dayOfWeek = interventionTime.getDay();
+
+    const responseValue = this.calculateResponseValue(userResponse, userRating);
     
     return {
-      title,
-      body: message.content,
-      data: {
-        type: 'micro_advice',
-        advice_id: crypto.randomUUID(),
-        category: interventionType,
-        action_required: true,
-        deep_link: `lifeos://advice/${interventionType}`,
-        priority: urgencyLevel as any
+      response_rates_by_hour: {
+        [hour]: responseValue
       },
-      actions,
-      badge: 1,
-      sound: urgencyLevel === 'emergency' ? 'emergency.wav' : 'gentle.wav'
-    };
-  }
-
-  // Generate appropriate notification title based on context
-  private generateNotificationTitle(interventionType: string, urgencyLevel: string): string {
-    if (urgencyLevel === 'emergency') {
-      return '🆘 Momento di supporto';
-    }
-
-    const titles = {
-      stress_relief: ['💙 Respira con me', '🌸 Un momento per te', '☁️ Pausa rilassante'],
-      energy_boost: ['⚡ Ricarica energia', '🔋 Attiva il corpo', '🚀 Boost moment'],
-      sleep_prep: ['🌙 Prepara il sonno', '😴 Wind down time', '🛏️ Verso il riposo'],
-      celebration: ['🎉 Ottimo lavoro!', '⭐ Sei fantastico', '👏 Grande progresso'],
-      mindfulness: ['🧘 Momento mindful', '🌅 Presenza', '✨ Centro te stesso']
-    };
-
-    const categoryTitles = titles[interventionType as keyof typeof titles] || ['💡 Micro consiglio'];
-    return categoryTitles[Math.floor(Math.random() * categoryTitles.length)];
-  }
-
-  // Create quick actions for notification
-  private createNotificationActions(interventionType: string): NotificationAction[] {
-    const baseActions: NotificationAction[] = [
-      {
-        id: 'complete',
-        title: '✅ Fatto',
-        type: 'complete'
+      completion_rates_by_day: {
+        [dayOfWeek]: responseValue
       },
-      {
-        id: 'snooze',
-        title: '⏰ 10 min',
-        type: 'snooze'
+      effectiveness_by_context: {
+        [`${interventionType}_${hour}`]: responseValue
       }
-    ];
-
-    // Add category-specific actions
-    if (interventionType === 'stress_relief') {
-      baseActions.unshift({
-        id: 'view_breathing',
-        title: '🫁 Respira ora',
-        type: 'view'
-      });
-    } else if (interventionType === 'energy_boost') {
-      baseActions.unshift({
-        id: 'view_movement',
-        title: '🏃 Muovi corpo',
-        type: 'view'
-      });
-    }
-
-    return baseActions;
-  }
-
-  // Check if notification can be sent (rate limiting, burnout prevention)
-  private canSendNotification(userId: string, preferences: NotificationPreferences): boolean {
-    // Check daily limit
-    const todayCount = this.getTodayNotificationCount(userId);
-    if (todayCount >= preferences.frequency_limits.max_daily) {
-      return false;
-    }
-
-    // Check minimum gap
-    const lastNotificationTime = this.getLastNotificationTime(userId);
-    if (lastNotificationTime) {
-      const timeSinceLastMin = (Date.now() - lastNotificationTime.getTime()) / (1000 * 60);
-      if (timeSinceLastMin < preferences.frequency_limits.min_gap_minutes) {
-        return false;
-      }
-    }
-
-    // Check burnout status
-    if (this.isUserInBurnoutCooldown(userId)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  // Check if time respects user's quiet hours
-  private respectsQuietHours(
-    scheduledTime: Date,
-    quietHours: NotificationPreferences['quiet_hours']
-  ): boolean {
-    if (!quietHours.enabled) return true;
-
-    const hour = scheduledTime.getHours();
-    const minute = scheduledTime.getMinutes();
-    const timeValue = hour * 60 + minute;
-
-    const [startHour, startMin] = quietHours.start_time.split(':').map(Number);
-    const [endHour, endMin] = quietHours.end_time.split(':').map(Number);
-    
-    const startValue = startHour * 60 + startMin;
-    const endValue = endHour * 60 + endMin;
-
-    // Handle overnight quiet hours (e.g., 22:00 - 07:00)
-    if (startValue > endValue) {
-      return !(timeValue >= startValue || timeValue <= endValue);
-    } else {
-      return !(timeValue >= startValue && timeValue <= endValue);
-    }
-  }
-
-  // Find next available time outside quiet hours
-  private findNextAvailableTime(
-    originalTime: Date,
-    quietHours: NotificationPreferences['quiet_hours']
-  ): Date {
-    if (!quietHours.enabled) return originalTime;
-
-    const [endHour, endMin] = quietHours.end_time.split(':').map(Number);
-    const nextAvailable = new Date(originalTime);
-    
-    nextAvailable.setHours(endHour, endMin, 0, 0);
-    
-    // If end time is next day, adjust accordingly
-    if (nextAvailable <= originalTime) {
-      nextAvailable.setDate(nextAvailable.getDate() + 1);
-    }
-
-    return nextAvailable;
-  }
-
-  // Build timing context for intelligent scheduling
-  private async buildTimingContext(userId: string): Promise<any> {
-    return {
-      current_time: new Date(),
-      user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      day_of_week: new Date().getDay(),
-      is_working_day: this.isWorkingDay(new Date()),
-      predicted_availability: await this.predictUserAvailability(userId),
-      recent_activity_level: await this.getRecentActivityLevel(userId),
-      time_since_last_intervention: await this.getTimeSinceLastIntervention(userId),
-      current_stress_trend: await this.getCurrentStressTrend(userId)
     };
   }
 
-  // Build empathetic context for message generation
-  private buildEmpatheticContext(
-    lifeScore: AdvancedLifeScore,
-    metrics: HealthMetrics,
-    userProfile: UserProfile,
-    preferences: NotificationPreferences
-  ): any {
-    return {
-      emotional_state: this.languageEngine.analyzeEmotionalState(lifeScore, metrics),
-      time_of_day: this.determineTimeOfDay(),
-      current_streak: 0, // Would be loaded from database
-      recent_completion_rate: 0.7, // Would be calculated from history
-      preferred_tone: preferences.tone_preference === 'adaptive' ? 
-        this.languageEngine.determineOptimalTone(userProfile, 'balanced', 'morning') :
-        preferences.tone_preference,
-      personality_traits: [],
-      historical_effectiveness: {}
-    };
-  }
-
-  // Determine intervention type based on current state
-  private determineInterventionType(lifeScore: AdvancedLifeScore, metrics: HealthMetrics): string {
-    const stress = metrics.stress;
-    const energy = lifeScore.breakdown.activity_score;
-    const sleep = lifeScore.breakdown.sleep_score;
-    const overall = lifeScore.score;
-
-    if (stress >= 4 || overall <= 30) return 'stress_relief';
-    if (energy <= 30 && stress < 3) return 'energy_boost';
-    if (sleep <= 40 && this.isEveningTime()) return 'sleep_prep';
-    if (overall >= 70 && energy >= 70) return 'celebration';
+  // Detect and prevent intervention burnout
+  detectBurnoutRisk(
+    patternLearning: PatternLearning,
+    recentInterventions: Array<{
+      time: Date;
+      response: string;
+      type: string;
+    }>
+  ): {
+    riskLevel: 'low' | 'medium' | 'high';
+    recommendations: string[];
+    cooldownPeriod?: number; // Hours
+  } {
+    const { burnout_indicators } = patternLearning;
     
-    return 'mindfulness'; // Default
-  }
+    let riskLevel: 'low' | 'medium' | 'high' = 'low';
+    const recommendations: string[] = [];
+    let cooldownPeriod: number | undefined;
 
-  // Platform-specific notification scheduling
-  private async scheduleNotification(
-    userId: string,
-    payload: PushNotificationPayload,
-    scheduledTime: Date,
-    preferences: NotificationPreferences,
-    customId?: string
-  ): Promise<string> {
-    const notificationId = customId || crypto.randomUUID();
-    const delay = scheduledTime.getTime() - Date.now();
-
-    if (delay <= 0) {
-      // Send immediately
-      await this.sendNotification(userId, payload, preferences);
-      return notificationId;
+    // Check consecutive dismissals
+    if (burnout_indicators.consecutive_dismissals >= 5) {
+      riskLevel = 'high';
+      recommendations.push('Reduce intervention frequency significantly');
+      cooldownPeriod = 24; // 24 hour cooldown
+    } else if (burnout_indicators.consecutive_dismissals >= 3) {
+      riskLevel = 'medium';
+      recommendations.push('Space out interventions more');
+      cooldownPeriod = 8; // 8 hour cooldown
     }
 
-    // Schedule for later
-    const timeout = setTimeout(async () => {
-      await this.sendNotification(userId, payload, preferences);
-      this.scheduledNotifications.delete(notificationId);
-    }, delay);
-
-    this.scheduledNotifications.set(notificationId, timeout);
-    
-    // Store in database for persistence
-    await this.saveScheduledNotification(notificationId, userId, payload, scheduledTime);
-
-    return notificationId;
-  }
-
-  // Send notification via appropriate channel
-  private async sendNotification(
-    userId: string,
-    payload: PushNotificationPayload,
-    preferences: NotificationPreferences
-  ): Promise<string> {
-    const deliveryContext = await this.getDeliveryContext(userId);
-    
-    // Check final delivery conditions
-    if (preferences.frequency_limits.respect_dnd && deliveryContext.device_settings.dnd_active) {
-      throw new Error('Respecting Do Not Disturb mode');
+    // Check declining engagement
+    if (burnout_indicators.declining_engagement) {
+      riskLevel = riskLevel === 'high' ? 'high' : 'medium';
+      recommendations.push('Switch to passive observation mode');
+      recommendations.push('Focus on celebration and positive reinforcement');
     }
 
-    // Choose delivery method based on preferences and context
-    if (preferences.delivery_channels.push_notifications && 
-        deliveryContext.device_settings.notifications_enabled) {
-      
-      return await this.sendPushNotification(userId, payload, deliveryContext);
-    } else if (preferences.delivery_channels.in_app_only) {
-      return await this.sendInAppNotification(userId, payload);
-    } else if (preferences.delivery_channels.email_backup) {
-      return await this.sendEmailNotification(userId, payload);
+    // Check fatigue score
+    if (burnout_indicators.fatigue_score > 0.8) {
+      riskLevel = 'high';
+      recommendations.push('Implement extended break from interventions');
+      cooldownPeriod = Math.max(cooldownPeriod || 0, 48);
     }
 
-    throw new Error('No available delivery channel');
+    return { riskLevel, recommendations, cooldownPeriod };
   }
 
-  // Send actual push notification (platform specific)
-  private async sendPushNotification(
-    userId: string,
-    payload: PushNotificationPayload,
-    context: DeliveryContext
-  ): Promise<string> {
-    // This would integrate with expo-notifications or platform-specific APIs
-    console.log('Sending push notification:', {
-      userId,
-      title: payload.title,
-      body: payload.body,
+  // Generate personalized intervention schedule
+  generateDailySchedule(
+    circadianProfile: CircadianProfile,
+    context: TimingContext,
+    patternLearning: PatternLearning,
+    plannedInterventions: string[]
+  ): Array<{
+    time: Date;
+    type: string;
+    confidence: number;
+    backup_times: Date[];
+  }> {
+    const schedule: Array<{
+      time: Date;
+      type: string;
+      confidence: number;
+      backup_times: Date[];
+    }> = [];
+
+    // Sort interventions by priority and optimal timing
+    const prioritizedInterventions = this.prioritizeInterventions(
+      plannedInterventions,
+      circadianProfile,
       context
-    });
+    );
 
-    // Mock implementation - in real app would use:
-    // - Expo.Notifications.scheduleNotificationAsync() for Expo
-    // - Firebase Cloud Messaging for native
-    // - Web Push API for web notifications
+    for (const intervention of prioritizedInterventions) {
+      const optimalMoment = this.predictOptimalMoment(
+        context,
+        circadianProfile,
+        { score: 75, breakdown: { sleep_score: 75, activity_score: 75, mental_score: 75 } } as AdvancedLifeScore, // Default scores
+        intervention,
+        patternLearning
+      );
 
-    return crypto.randomUUID();
-  }
-
-  // Utility methods (would be implemented with actual data sources)
-  private determineTimeOfDay(): string {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return 'morning';
-    if (hour >= 12 && hour < 17) return 'afternoon';
-    if (hour >= 17 && hour < 22) return 'evening';
-    return 'night';
-  }
-
-  private isEveningTime(): boolean {
-    const hour = new Date().getHours();
-    return hour >= 18 && hour <= 23;
-  }
-
-  private isWorkingDay(date: Date): boolean {
-    const day = date.getDay();
-    return day >= 1 && day <= 5; // Monday to Friday
-  }
-
-  // These methods would connect to actual databases and services
-  private async getUserPreferences(userId: string): Promise<NotificationPreferences> {
-    // Load from database
-    return {
-      enabled: true,
-      categories: {
-        stress_relief: true,
-        energy_boost: true,
-        sleep_prep: true,
-        celebration: true,
-        emergency: true
-      },
-      quiet_hours: {
-        enabled: true,
-        start_time: '22:00',
-        end_time: '07:00'
-      },
-      frequency_limits: {
-        max_daily: 5,
-        min_gap_minutes: 90,
-        respect_dnd: true
-      },
-      delivery_channels: {
-        push_notifications: true,
-        in_app_only: false,
-        email_backup: false
-      },
-      tone_preference: 'adaptive'
-    };
-  }
-
-  private async getUserPatternLearning(userId: string): Promise<any> {
-    // Load from database
-    return {
-      response_rates_by_hour: {},
-      completion_rates_by_day: {},
-      effectiveness_by_context: {},
-      burnout_indicators: {
-        consecutive_dismissals: 0,
-        declining_engagement: false,
-        fatigue_score: 0
+      if (optimalMoment.confidence_score > 0.5) {
+        schedule.push({
+          time: optimalMoment.suggested_time,
+          type: intervention,
+          confidence: optimalMoment.confidence_score,
+          backup_times: optimalMoment.alternative_times
+        });
       }
+    }
+
+    return this.optimizeScheduleSpacing(schedule);
+  }
+
+  // Private helper methods
+  private extractSleepPatterns(metrics: HealthMetrics[]) {
+    return {
+      bedtimes: metrics.map(m => (m as any).sleep_time).filter(Boolean),
+      waketimes: metrics.map(m => (m as any).wake_time).filter(Boolean)
     };
   }
 
-  private getTodayNotificationCount(userId: string): number {
-    // Query database for today's notifications
-    return 0;
+  private extractEnergyPatterns(metrics: HealthMetrics[]) {
+    return metrics.map(m => ({
+      hour: new Date((m as any).timestamp || m.date).getHours(),
+      energy: (m as any).energy_level || m.energy || 5
+    }));
   }
 
-  private getLastNotificationTime(userId: string): Date | null {
-    // Query database for last notification time
-    return null;
+  private extractStressPatterns(metrics: HealthMetrics[]) {
+    return metrics.map(m => ({
+      hour: new Date((m as any).timestamp || m.date).getHours(),
+      stress: (m as any).stress_level || m.stress || 5
+    }));
   }
 
-  private isUserInBurnoutCooldown(userId: string): boolean {
-    // Check if user is in cooldown period due to burnout
+  private calculateAverageTime(times: string[]): string {
+    if (times.length === 0) return '07:00';
+    
+    // Convert times to minutes from midnight, average, then convert back
+    const totalMinutes = times.reduce((sum, time) => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return sum + (hours * 60) + minutes;
+    }, 0);
+    
+    const avgMinutes = Math.round(totalMinutes / times.length);
+    const hours = Math.floor(avgMinutes / 60);
+    const mins = avgMinutes % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+  }
+
+  private determineChronotype(bedtime: string, waketime: string): CircadianProfile['chronotype'] {
+    const bedHour = parseInt(bedtime.split(':')[0]);
+    const wakeHour = parseInt(waketime.split(':')[0]);
+    
+    if (wakeHour <= 6 && bedHour <= 22) return 'early_bird';
+    if (wakeHour >= 9 && bedHour >= 24) return 'night_owl';
+    return 'intermediate';
+  }
+
+  private findPeakHours(data: Array<{ hour: number; energy?: number; stress?: number }>, type: 'high' | 'low'): number[] {
+    const hourlyAverages: Record<number, number> = {};
+    
+    // Calculate averages for each hour
+    for (let hour = 0; hour < 24; hour++) {
+      const hourData = data.filter(d => d.hour === hour);
+      if (hourData.length > 0) {
+        const values = hourData.map(d => d.energy || d.stress || 5);
+        hourlyAverages[hour] = values.reduce((sum, val) => sum + val, 0) / values.length;
+      }
+    }
+
+    // Find peaks or lows
+    const hours = Object.keys(hourlyAverages).map(Number);
+    const values = Object.values(hourlyAverages);
+    const threshold = type === 'high' ? 
+      Math.max(...values) * 0.8 : 
+      Math.min(...values) * 1.2;
+
+    return hours.filter(hour => 
+      type === 'high' ? 
+        hourlyAverages[hour] >= threshold :
+        hourlyAverages[hour] <= threshold
+    );
+  }
+
+  private generateOptimalWindows(
+    chronotype: CircadianProfile['chronotype'],
+    peakEnergyHours: number[],
+    lowEnergyHours: number[],
+    stressPeakHours: number[]
+  ): TimeWindow[] {
+    const windows: TimeWindow[] = [];
+
+    // Energy boost windows (during low energy periods)
+    for (const hour of lowEnergyHours) {
+      if (hour >= 6 && hour <= 20) { // Only during waking hours
+        windows.push({
+          start_hour: hour,
+          end_hour: hour + 1,
+          effectiveness_score: 0.85,
+          intervention_type: 'energy_boost',
+          frequency_limit: 1
+        });
+      }
+    }
+
+    // Stress relief windows (during or just before stress peaks)
+    for (const hour of stressPeakHours) {
+      windows.push({
+        start_hour: Math.max(hour - 1, 6),
+        end_hour: hour + 1,
+        effectiveness_score: 0.9,
+        intervention_type: 'stress_relief',
+        frequency_limit: 2
+      });
+    }
+
+    // Mindfulness windows (based on chronotype)
+    if (chronotype === 'early_bird') {
+      windows.push({
+        start_hour: 6,
+        end_hour: 8,
+        effectiveness_score: 0.8,
+        intervention_type: 'mindfulness',
+        frequency_limit: 1
+      });
+    } else if (chronotype === 'night_owl') {
+      windows.push({
+        start_hour: 21,
+        end_hour: 23,
+        effectiveness_score: 0.75,
+        intervention_type: 'mindfulness',
+        frequency_limit: 1
+      });
+    }
+
+    // Celebration windows (during peak energy)
+    for (const hour of peakEnergyHours) {
+      windows.push({
+        start_hour: hour,
+        end_hour: hour + 2,
+        effectiveness_score: 0.7,
+        intervention_type: 'celebration',
+        frequency_limit: 1
+      });
+    }
+
+    return windows;
+  }
+
+  private assessUrgencyLevel(
+    lifeScore: AdvancedLifeScore,
+    context: TimingContext
+  ): OptimalMoment['urgency_level'] {
+    const stress = context.current_stress_trend === 'rising' ? 8 : 5; // Fallback since AdvancedLifeScore doesn't have stress directly
+    const overall = lifeScore.score;
+    
+    if (stress >= 9 || overall <= 20) return 'emergency';
+    if (stress >= 7 || overall <= 30) return 'high';
+    if (stress >= 6 || overall <= 40) return 'medium';
+    return 'low';
+  }
+
+  private calculateWindowScore(
+    window: TimeWindow,
+    context: TimingContext,
+    patternLearning: PatternLearning,
+    urgency: string
+  ): number {
+    let score = window.effectiveness_score;
+    
+    // Historical response rate for this hour
+    const hour = context.current_time.getHours();
+    if (patternLearning.response_rates_by_hour[hour]) {
+      score = (score + patternLearning.response_rates_by_hour[hour]) / 2;
+    }
+
+    // Day of week adjustment
+    const dayOfWeek = context.current_time.getDay();
+    if (patternLearning.completion_rates_by_day[dayOfWeek]) {
+      score = (score + patternLearning.completion_rates_by_day[dayOfWeek]) / 2;
+    }
+
+    // Urgency boost
+    if (urgency === 'high') score += 0.1;
+    if (urgency === 'emergency') score += 0.2;
+
+    // Availability score
+    score *= context.predicted_availability;
+
+    return Math.min(score, 1);
+  }
+
+  private findNextTimeInWindow(window: TimeWindow, currentTime: Date): Date {
+    const current = new Date(currentTime);
+    const targetHour = window.start_hour;
+    
+    current.setHours(targetHour, 0, 0, 0);
+    
+    // If time has passed today, schedule for tomorrow
+    if (current <= currentTime) {
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return current;
+  }
+
+  private generateReasoningForWindow(window: TimeWindow, score: number): string {
+    const reasons = [];
+    
+    if (window.effectiveness_score > 0.8) {
+      reasons.push('historically high effectiveness');
+    }
+    
+    if (window.intervention_type === 'stress_relief') {
+      reasons.push('optimal for stress management');
+    }
+    
+    if (window.intervention_type === 'energy_boost') {
+      reasons.push('perfect timing for energy enhancement');
+    }
+    
+    if (score > 0.8) {
+      reasons.push('user typically responsive at this time');
+    }
+    
+    return reasons.join(', ') || 'good timing based on analysis';
+  }
+
+  private generateAlternativeTimes(
+    bestTime: Date,
+    circadianProfile: CircadianProfile,
+    context: TimingContext
+  ): Date[] {
+    const alternatives: Date[] = [];
+    
+    // Add times ±2 hours from best time
+    for (let offset of [-2, -1, 1, 2]) {
+      const altTime = new Date(bestTime);
+      altTime.setHours(altTime.getHours() + offset);
+      
+      if (altTime > context.current_time) {
+        alternatives.push(altTime);
+      }
+    }
+    
+    return alternatives.slice(0, 3); // Max 3 alternatives
+  }
+
+  private hasReachedDailyLimit(context: TimingContext, patternLearning: PatternLearning): boolean {
+    // This would check against actual intervention history
+    // Simplified for this implementation
     return false;
   }
 
-  private async predictUserAvailability(userId: string): Promise<number> {
-    // ML model to predict availability (0-1)
-    return 0.8;
+  private calculateCurrentMomentScore(
+    context: TimingContext,
+    window: TimeWindow,
+    patternLearning: PatternLearning
+  ): number {
+    return this.calculateWindowScore(window, context, patternLearning, 'low');
   }
 
-  private async getRecentActivityLevel(userId: string): Promise<'low' | 'medium' | 'high'> {
-    // Analyze recent app usage
-    return 'medium';
-  }
-
-  private async getTimeSinceLastIntervention(userId: string): Promise<number> {
-    // Minutes since last intervention
-    return 120;
-  }
-
-  private async getCurrentStressTrend(userId: string): Promise<'rising' | 'stable' | 'declining'> {
-    // Analyze stress trend from recent data
-    return 'stable';
-  }
-
-  private async getDeliveryContext(userId: string): Promise<DeliveryContext> {
-    return {
-      device_type: 'ios',
-      app_state: 'background',
-      device_settings: {
-        notifications_enabled: true,
-        dnd_active: false,
-        battery_level: 75
-      },
-      network_status: 'online',
-      user_activity: 'idle'
-    };
-  }
-
-  private cancelScheduledNotification(notificationId: string): void {
-    const timeout = this.scheduledNotifications.get(notificationId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.scheduledNotifications.delete(notificationId);
+  private calculateResponseValue(response: string, rating?: number): number {
+    switch (response) {
+      case 'completed': return rating ? rating / 10 : 0.8;
+      case 'snoozed': return 0.4;
+      case 'dismissed': return 0.1;
+      default: return 0.5;
     }
   }
 
-  // Placeholder methods for database operations
-  private async saveScheduledNotification(id: string, userId: string, payload: any, time: Date): Promise<void> {}
-  private async getNotificationData(id: string): Promise<any> { return null; }
-  private async recordUserResponse(id: string, userId: string, action: string): Promise<void> {}
-  private async markAdviceCompleted(id: string, userId: string): Promise<void> {}
-  private async triggerPositiveReinforcement(userId: string): Promise<void> {}
-  private async handleDismissal(id: string, userId: string): Promise<void> {}
-  private async trackEngagement(id: string, userId: string): Promise<void> {}
-  private async sendInAppNotification(userId: string, payload: any): Promise<string> { return ''; }
-  private async sendEmailNotification(userId: string, payload: any): Promise<string> { return ''; }
+  private prioritizeInterventions(
+    interventions: string[],
+    circadianProfile: CircadianProfile,
+    context: TimingContext
+  ): string[] {
+    // Simple prioritization - in production this would be more sophisticated
+    const priority = ['stress_relief', 'energy_boost', 'mindfulness', 'celebration'];
+    return interventions.sort((a, b) => {
+      const aIndex = priority.indexOf(a);
+      const bIndex = priority.indexOf(b);
+      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+    });
+  }
+
+  private optimizeScheduleSpacing(
+    schedule: Array<{
+      time: Date;
+      type: string;
+      confidence: number;
+      backup_times: Date[];
+    }>
+  ) {
+    // Ensure minimum spacing between interventions
+    const optimized = [];
+    let lastTime: Date | null = null;
+
+    for (const item of schedule.sort((a, b) => a.time.getTime() - b.time.getTime())) {
+      if (!lastTime || 
+          (item.time.getTime() - lastTime.getTime()) >= (this.MIN_INTERVENTION_GAP_MINUTES * 60 * 1000)) {
+        optimized.push(item);
+        lastTime = item.time;
+      }
+    }
+
+    return optimized.slice(0, this.MAX_DAILY_INTERVENTIONS);
+  }
 }
