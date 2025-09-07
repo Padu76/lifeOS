@@ -2,14 +2,15 @@ import { EmpatheticLanguageEngine, GeneratedMessage } from '../advice/empathetic
 import { IntelligentTimingSystem, OptimalMoment, CircadianProfile } from '../advice/intelligentTimingSystem';
 import { IntelligentPushSystem } from '../advice/intelligentPushSystem';
 import { SoftGamificationSystem, StreakData, PersonalizedAchievement, CelebrationMoment } from '../advice/softGamificationSystem';
-import { HealthMetrics, LifeScoreV2, UserProfile } from '../../types';
+import { HealthMetrics } from '../../types';
+import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 
 // Types for the integrated system
 interface MicroAdviceSession {
   id: string;
   user_id: string;
   timestamp: Date;
-  life_score: LifeScoreV2;
+  life_score: AdvancedLifeScore;
   metrics: HealthMetrics;
   generated_advice: GeneratedMessage;
   optimal_timing: OptimalMoment;
@@ -49,7 +50,7 @@ interface UserWellnessProfile {
 interface AdviceGenerationRequest {
   user_id: string;
   current_metrics: HealthMetrics;
-  current_life_score: LifeScoreV2;
+  current_life_score: AdvancedLifeScore;
   force_immediate?: boolean; // For emergency situations
   preferred_category?: string;
   context_override?: any;
@@ -249,7 +250,7 @@ export class MicroAdviceOrchestrator {
 
   // Get user's current wellness dashboard data
   async getWellnessDashboard(userId: string): Promise<{
-    current_life_score: LifeScoreV2;
+    current_life_score: AdvancedLifeScore;
     active_streaks: StreakData[];
     recent_achievements: PersonalizedAchievement[];
     pending_celebrations: CelebrationMoment[];
@@ -472,7 +473,7 @@ export class MicroAdviceOrchestrator {
   }
 
   private async analyzeInterventionNeed(
-    lifeScore: LifeScoreV2,
+    lifeScore: AdvancedLifeScore,
     metrics: HealthMetrics,
     userProfile: UserWellnessProfile,
     forceImmediate?: boolean
@@ -492,10 +493,13 @@ export class MicroAdviceOrchestrator {
       };
     }
 
-    const { stress, energy, sleep, overall } = lifeScore;
+    const { score: overall, breakdown } = lifeScore;
+    const stress = metrics.stress || 5;
+    const energy = breakdown?.energy || 50;
+    const sleep = breakdown?.sleep || 50;
     
     // Emergency situations
-    if (stress >= 9 || overall <= 2) {
+    if (stress >= 9 || overall <= 20) {
       return {
         intervention_needed: true,
         intervention_type: 'stress_relief',
@@ -505,7 +509,7 @@ export class MicroAdviceOrchestrator {
     }
 
     // High priority situations
-    if (stress >= 7 || overall <= 3) {
+    if (stress >= 7 || overall <= 30) {
       return {
         intervention_needed: true,
         intervention_type: 'stress_relief',
@@ -515,7 +519,7 @@ export class MicroAdviceOrchestrator {
     }
 
     // Medium priority - energy or sleep issues
-    if (energy <= 3 && stress < 6) {
+    if (energy <= 30 && stress < 6) {
       return {
         intervention_needed: true,
         intervention_type: 'energy_boost',
@@ -524,7 +528,7 @@ export class MicroAdviceOrchestrator {
       };
     }
 
-    if (sleep <= 4 && this.isEveningTime()) {
+    if (sleep <= 40 && this.isEveningTime()) {
       return {
         intervention_needed: true,
         intervention_type: 'sleep_prep',
@@ -534,7 +538,7 @@ export class MicroAdviceOrchestrator {
     }
 
     // Positive interventions
-    if (overall >= 7 && energy >= 7) {
+    if (overall >= 70 && energy >= 70) {
       return {
         intervention_needed: true,
         intervention_type: 'celebration',
@@ -557,7 +561,7 @@ export class MicroAdviceOrchestrator {
     }
 
     // Default mindfulness if conditions are met
-    if (overall >= 5) {
+    if (overall >= 50) {
       return {
         intervention_needed: true,
         intervention_type: 'motivation',
@@ -575,7 +579,7 @@ export class MicroAdviceOrchestrator {
   }
 
   private buildEmpatheticContext(
-    lifeScore: LifeScoreV2,
+    lifeScore: AdvancedLifeScore,
     metrics: HealthMetrics,
     userProfile: UserWellnessProfile
   ): any {
@@ -593,7 +597,7 @@ export class MicroAdviceOrchestrator {
   private async updateGamificationElements(
     userId: string,
     metrics: HealthMetrics,
-    lifeScore: LifeScoreV2,
+    lifeScore: AdvancedLifeScore,
     userProfile: UserWellnessProfile
   ): Promise<{
     streaks_updated: StreakData[];
@@ -760,12 +764,12 @@ export class MicroAdviceOrchestrator {
   private async getCurrentMetrics(userId: string): Promise<HealthMetrics> {
     return {} as HealthMetrics;
   }
-  private async calculateCurrentLifeScore(userId: string): Promise<LifeScoreV2> {
-    return { stress: 5, energy: 5, sleep: 5, overall: 5 };
+  private async calculateCurrentLifeScore(userId: string): Promise<AdvancedLifeScore> {
+    return { score: 50, breakdown: { energy: 50, sleep: 50 } } as AdvancedLifeScore;
   }
   private async getPendingCelebrations(userId: string): Promise<CelebrationMoment[]> { return []; }
   private async getHistoricalMetrics(userId: string, period?: string): Promise<HealthMetrics[]> { return []; }
-  private async generateWellnessInsights(userProfile: UserWellnessProfile, lifeScore: LifeScoreV2, metrics: HealthMetrics): Promise<string[]> {
+  private async generateWellnessInsights(userProfile: UserWellnessProfile, lifeScore: AdvancedLifeScore, metrics: HealthMetrics): Promise<string[]> {
     return ["I tuoi livelli di energia sono migliorati questa settimana", "La gestione dello stress sta diventando più efficace"];
   }
   private async updateNotificationPreferences(userId: string, preferences: any): Promise<void> {}
