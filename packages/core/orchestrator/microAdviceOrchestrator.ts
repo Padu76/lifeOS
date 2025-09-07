@@ -243,8 +243,9 @@ export class MicroAdviceOrchestrator {
       };
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error handling advice response:', error);
-      throw new Error(`Failed to handle response: ${error.message}`);
+      throw new Error(`Failed to handle response: ${errorMessage}`);
     }
   }
 
