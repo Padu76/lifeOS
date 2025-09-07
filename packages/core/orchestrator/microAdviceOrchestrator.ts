@@ -767,7 +767,7 @@ export class MicroAdviceOrchestrator {
     return {} as HealthMetrics;
   }
   private async calculateCurrentLifeScore(userId: string): Promise<AdvancedLifeScore> {
-    return { score: 50, breakdown: { energy: 50, sleep: 50 } } as AdvancedLifeScore;
+    return { score: 50, breakdown: { activity_score: 50, sleep_score: 50, mental_score: 50 } } as AdvancedLifeScore;
   }
   private async getPendingCelebrations(userId: string): Promise<CelebrationMoment[]> { return []; }
   private async getHistoricalMetrics(userId: string, period?: string): Promise<HealthMetrics[]> { return []; }
