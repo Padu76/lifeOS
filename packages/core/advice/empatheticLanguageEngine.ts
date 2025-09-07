@@ -399,13 +399,15 @@ export class EmpatheticLanguageEngine {
     lifeScore: AdvancedLifeScore,
     metrics: HealthMetrics
   ): EmpatheticContext['emotional_state'] {
-    const { stress, energy, sleep, overall } = lifeScore;
+    const { score: overall, breakdown } = lifeScore;
+    const { sleep_score: sleep, activity_score: energy, mental_score: mentalScore } = breakdown;
+    const stress = metrics.stress; // Get stress directly from metrics
 
-    if (stress > 7 || overall < 4) return 'stressed';
-    if (stress > 6 && sleep < 5) return 'anxious';
-    if (energy > 7 && overall > 6) return 'energetic';
-    if (energy > 6 && stress < 4) return 'motivated';
-    if (energy < 4 || sleep < 4) return 'tired';
+    if (stress > 4 || overall < 40) return 'stressed';
+    if (stress > 3 && sleep < 50) return 'anxious';
+    if (energy > 70 && overall > 60) return 'energetic';
+    if (energy > 60 && stress < 3) return 'motivated';
+    if (energy < 40 || sleep < 40) return 'tired';
     
     return 'balanced';
   }
