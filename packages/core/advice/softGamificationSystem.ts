@@ -1,4 +1,5 @@
-import { HealthMetrics, LifeScoreV2, UserProfile } from '../../types';
+import { HealthMetrics } from '../../types';
+import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 import { EmpatheticLanguageEngine } from './empatheticLanguageEngine';
 
 // Types for soft gamification system
@@ -79,7 +80,7 @@ export class SoftGamificationSystem {
   analyzeStreaks(
     userId: string,
     recentMetrics: HealthMetrics[],
-    currentLifeScore: LifeScoreV2,
+    currentLifeScore: AdvancedLifeScore,
     motivationProfile: MotivationProfile
   ): StreakData[] {
     const streaks: StreakData[] = [];
@@ -226,7 +227,7 @@ export class SoftGamificationSystem {
 
   // Generate contextual positive feedback
   generateContextualFeedback(
-    currentLifeScore: LifeScoreV2,
+    currentLifeScore: AdvancedLifeScore,
     recentTrend: 'improving' | 'stable' | 'declining',
     userContext: {
       timeOfDay: string;
@@ -328,7 +329,7 @@ export class SoftGamificationSystem {
 
   private analyzeCheckinStreak(metrics: HealthMetrics[]): StreakData {
     const sortedMetrics = metrics.sort((a, b) => 
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      new Date((a as any).timestamp || a.date).getTime() - new Date((b as any).timestamp || b.date).getTime()
     );
 
     let currentStreak = 0;
@@ -342,7 +343,7 @@ export class SoftGamificationSystem {
     for (let i = 0; i < 30; i++) { // Check last 30 days
       const checkDate = new Date(today.getTime() - (i * oneDayMs));
       const hasCheckin = sortedMetrics.some(metric => 
-        this.isSameDay(new Date(metric.timestamp), checkDate)
+        this.isSameDay(new Date((metric as any).timestamp || metric.date), checkDate)
       );
 
       if (hasCheckin) {
@@ -361,7 +362,7 @@ export class SoftGamificationSystem {
       best_count: bestStreak,
       category: 'checkin',
       pattern_strength: 1.0,
-      last_activity: sortedMetrics.length > 0 ? new Date(sortedMetrics[sortedMetrics.length - 1].timestamp) : new Date(),
+      last_activity: sortedMetrics.length > 0 ? new Date((sortedMetrics[sortedMetrics.length - 1] as any).timestamp || sortedMetrics[sortedMetrics.length - 1].date) : new Date(),
       celebration_pending: currentStreak > 0 && currentStreak % 3 === 0 // Celebrate every 3 days
     };
   }
@@ -618,9 +619,9 @@ export class SoftGamificationSystem {
     // Simplified trend analysis
     const recentValues = metrics.slice(-7).map(m => {
       switch (category) {
-        case 'stress_mgmt': return 10 - (m.stress_level || 5); // Inverse stress
-        case 'energy': return m.energy_level || 5;
-        case 'sleep': return m.sleep_quality || 5;
+        case 'stress_mgmt': return 10 - ((m as any).stress_level || m.stress || 5); // Inverse stress
+        case 'energy': return (m as any).energy_level || m.energy || 5;
+        case 'sleep': return (m as any).sleep_quality || m.sleep_quality || 5;
         default: return 5;
       }
     });
@@ -645,7 +646,7 @@ export class SoftGamificationSystem {
   } {
     // Calculate variance to determine stability
     const recentScores = metrics.slice(-14).map(m => 
-      ((m.energy_level || 5) + (10 - (m.stress_level || 5)) + (m.sleep_quality || 5)) / 3
+      (((m as any).energy_level || m.energy || 5) + (10 - ((m as any).stress_level || m.stress || 5)) + ((m as any).sleep_quality || m.sleep_quality || 5)) / 3
     );
 
     if (recentScores.length < 7) {
@@ -733,7 +734,7 @@ export class SoftGamificationSystem {
     // Simplified implementation for now
     if ('type' in achievementOrStreak) {
       // Streak message
-      return `Fantastico! ${achievementOrStreak.current_count} giorni di ${achievementOrStreak.category}. La costanza è la tua forza! 🌟`;
+      return `Fantastico! ${achievementOrStreak.current_count} giorni di ${achievementOrStreak.category}. La costanza è la tua forza!`;
     } else {
       // Achievement message
       return `${achievementOrStreak.title}! ${achievementOrStreak.description}`;
@@ -795,15 +796,15 @@ export class SoftGamificationSystem {
     return milestones.slice(0, 3); // Limit to most important
   }
 
-  private generateProgressFeedback(lifeScore: LifeScoreV2, userContext: any, motivationProfile: MotivationProfile): string {
+  private generateProgressFeedback(lifeScore: AdvancedLifeScore, userContext: any, motivationProfile: MotivationProfile): string {
     return "Ottimo progresso! I tuoi sforzi stanno dando risultati visibili.";
   }
 
-  private generateStabilityFeedback(lifeScore: LifeScoreV2, userContext: any, motivationProfile: MotivationProfile): string {
+  private generateStabilityFeedback(lifeScore: AdvancedLifeScore, userContext: any, motivationProfile: MotivationProfile): string {
     return "La tua costanza è ammirevole. Mantenere l'equilibrio è una skill preziosa.";
   }
 
-  private generateSupportiveFeedback(lifeScore: LifeScoreV2, userContext: any, motivationProfile: MotivationProfile): string {
+  private generateSupportiveFeedback(lifeScore: AdvancedLifeScore, userContext: any, motivationProfile: MotivationProfile): string {
     return "Ogni giorno è diverso, e va bene così. Il fatto che tu sia qui conta molto.";
   }
 
