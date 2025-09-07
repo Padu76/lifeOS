@@ -457,10 +457,12 @@ function getDefaultHealthMetrics() {
     user_id: 'guest',
     date: new Date().toISOString().split('T')[0],
     sleep_hours: 7,
+    sleep_quality: 3, // 1-5 scale
     steps: 5000,
     mood: 3,
     stress: 3,
-    energy: 3
+    energy: 3,
+    source: 'default_values'
   };
 }
 
