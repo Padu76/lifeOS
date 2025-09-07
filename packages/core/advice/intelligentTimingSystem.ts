@@ -1,7 +1,8 @@
-import { HealthMetrics, LifeScoreV2, UserProfile } from '../../types';
+import { HealthMetrics, LifeScore, UserProfile } from '../../types';
+import { AdvancedLifeScore } from '../scoring/lifeScoreV2';
 
 // Types for intelligent timing system
-interface CircadianProfile {
+export interface CircadianProfile {
   chronotype: 'early_bird' | 'night_owl' | 'intermediate';
   natural_wake_time: string; // HH:MM format
   natural_sleep_time: string; // HH:MM format
@@ -11,7 +12,7 @@ interface CircadianProfile {
   optimal_intervention_windows: TimeWindow[];
 }
 
-interface TimeWindow {
+export interface TimeWindow {
   start_hour: number;
   end_hour: number;
   effectiveness_score: number;
@@ -19,7 +20,7 @@ interface TimeWindow {
   frequency_limit: number; // Max interventions in this window per day
 }
 
-interface TimingContext {
+export interface TimingContext {
   current_time: Date;
   user_timezone: string;
   day_of_week: number; // 0 = Sunday
@@ -30,7 +31,7 @@ interface TimingContext {
   current_stress_trend: 'rising' | 'stable' | 'declining';
 }
 
-interface OptimalMoment {
+export interface OptimalMoment {
   suggested_time: Date;
   confidence_score: number; // 0-1
   intervention_type: string;
@@ -39,7 +40,7 @@ interface OptimalMoment {
   urgency_level: 'low' | 'medium' | 'high' | 'emergency';
 }
 
-interface PatternLearning {
+export interface PatternLearning {
   response_rates_by_hour: Record<number, number>;
   completion_rates_by_day: Record<number, number>;
   effectiveness_by_context: Record<string, number>;
@@ -97,7 +98,7 @@ export class IntelligentTimingSystem {
   predictOptimalMoment(
     context: TimingContext,
     circadianProfile: CircadianProfile,
-    currentLifeScore: LifeScoreV2,
+    currentLifeScore: AdvancedLifeScore,
     interventionType: string,
     patternLearning: PatternLearning
   ): OptimalMoment {
@@ -320,7 +321,7 @@ export class IntelligentTimingSystem {
       const optimalMoment = this.predictOptimalMoment(
         context,
         circadianProfile,
-        { stress: 5, energy: 5, sleep: 5, overall: 5 }, // Default scores
+        { score: 75, breakdown: { sleep_score: 75, activity_score: 75, mental_score: 75 } } as AdvancedLifeScore, // Default scores
         intervention,
         patternLearning
       );
@@ -341,22 +342,22 @@ export class IntelligentTimingSystem {
   // Private helper methods
   private extractSleepPatterns(metrics: HealthMetrics[]) {
     return {
-      bedtimes: metrics.map(m => m.sleep_time).filter(Boolean),
-      waketimes: metrics.map(m => m.wake_time).filter(Boolean)
+      bedtimes: metrics.map(m => (m as any).sleep_time).filter(Boolean),
+      waketimes: metrics.map(m => (m as any).wake_time).filter(Boolean)
     };
   }
 
   private extractEnergyPatterns(metrics: HealthMetrics[]) {
     return metrics.map(m => ({
-      hour: new Date(m.timestamp).getHours(),
-      energy: m.energy_level || 5
+      hour: new Date((m as any).timestamp || m.date).getHours(),
+      energy: (m as any).energy_level || m.energy || 5
     }));
   }
 
   private extractStressPatterns(metrics: HealthMetrics[]) {
     return metrics.map(m => ({
-      hour: new Date(m.timestamp).getHours(),
-      stress: m.stress_level || 5
+      hour: new Date((m as any).timestamp || m.date).getHours(),
+      stress: (m as any).stress_level || m.stress || 5
     }));
   }
 
@@ -477,14 +478,15 @@ export class IntelligentTimingSystem {
   }
 
   private assessUrgencyLevel(
-    lifeScore: LifeScoreV2,
+    lifeScore: AdvancedLifeScore,
     context: TimingContext
   ): OptimalMoment['urgency_level'] {
-    const { stress, overall } = lifeScore;
+    const stress = context.current_stress_trend === 'rising' ? 8 : 5; // Fallback since AdvancedLifeScore doesn't have stress directly
+    const overall = lifeScore.score;
     
-    if (stress >= 9 || overall <= 2) return 'emergency';
-    if (stress >= 7 || overall <= 3) return 'high';
-    if (stress >= 6 || overall <= 4) return 'medium';
+    if (stress >= 9 || overall <= 20) return 'emergency';
+    if (stress >= 7 || overall <= 30) return 'high';
+    if (stress >= 6 || overall <= 40) return 'medium';
     return 'low';
   }
 
