@@ -177,8 +177,9 @@ export class MicroAdviceOrchestrator {
       };
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error in generateMicroAdvice:', error);
-      throw new Error(`Failed to generate micro advice: ${error.message}`);
+      throw new Error(`Failed to generate micro advice: ${errorMessage}`);
     }
   }
 
