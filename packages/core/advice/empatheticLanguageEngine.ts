@@ -31,8 +31,6 @@ export interface GeneratedMessage {
   storytelling_element?: string;
 }
 
-export { GeneratedMessage };
-
 export class EmpatheticLanguageEngine {
   private templates: MessageTemplate[] = [
     // Stress Relief Templates
