@@ -116,7 +116,8 @@ export async function POST(request: NextRequest) {
       });
 
     } catch (orchestratorError) {
-      console.log('Orchestrator failed, using fallback system:', orchestratorError.message);
+      const errorMessage = orchestratorError instanceof Error ? orchestratorError.message : 'Unknown error';
+      console.log('Orchestrator failed, using fallback system:', errorMessage);
       
       // Fallback to simplified system if orchestrator fails
       return await generateFallbackResponse(supabase, userId, context_override);
