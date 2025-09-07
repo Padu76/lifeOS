@@ -52,12 +52,13 @@ export async function POST(request: NextRequest) {
       const previousScores = await getPreviousLifeScores(supabase, userId);
       
       // Calculate advanced life score using V2
-      const currentLifeScore = await LifeScoreV2Calculator.calculateAdvancedLifeScore(
-        currentMetrics,
-        historicalMetrics,
-        await getUserProfile(supabase, userId),
-        previousScores
-      );
+const currentLifeScore = await LifeScoreV2Calculator.calculateAdvancedLifeScore(
+  userId,              // <- Aggiungi questo come primo parametro
+  currentMetrics,
+  historicalMetrics,
+  await getUserProfile(supabase, userId),
+  previousScores
+);
 
       // Generate advice using orchestrator
       const adviceResponse = await orchestrator.generateMicroAdvice({
