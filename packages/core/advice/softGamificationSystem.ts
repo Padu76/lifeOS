@@ -385,7 +385,7 @@ export class SoftGamificationSystem {
       type: 'pattern',
       current_count: patternCount,
       best_count: patternCount, // Would track historically
-      category: 'consistency',
+      category: 'overall_wellness',
       pattern_strength: patternStrength,
       last_activity: new Date(),
       celebration_pending: patternStrength > 0.7 && patternCount % 2 === 0
