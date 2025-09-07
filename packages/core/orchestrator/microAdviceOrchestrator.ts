@@ -479,7 +479,7 @@ export class MicroAdviceOrchestrator {
     forceImmediate?: boolean
   ): Promise<{
     intervention_needed: boolean;
-    intervention_type: string;
+    intervention_type: 'stress_relief' | 'energy_boost' | 'sleep_prep' | 'celebration' | 'motivation' | 'none';
     urgency_level: 'low' | 'medium' | 'high' | 'emergency';
     reasoning: string;
   }> {
