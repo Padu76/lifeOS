@@ -22,7 +22,7 @@ interface MessageTemplate {
   usage_count: number;
 }
 
-interface GeneratedMessage {
+export interface GeneratedMessage {
   content: string;
   tone: string;
   template_id: string;
@@ -30,6 +30,8 @@ interface GeneratedMessage {
   predicted_effectiveness: number;
   storytelling_element?: string;
 }
+
+export { GeneratedMessage };
 
 export class EmpatheticLanguageEngine {
   private templates: MessageTemplate[] = [
