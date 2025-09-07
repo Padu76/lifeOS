@@ -1,6 +1,7 @@
 import { EmpatheticLanguageEngine, GeneratedMessage } from './empatheticLanguageEngine';
 import { IntelligentTimingSystem, OptimalMoment, CircadianProfile } from './intelligentTimingSystem';
-import { HealthMetrics, LifeScoreV2, UserProfile } from '../../types';
+import { HealthMetrics } from '../../types';
+import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 
 // Types for intelligent push notification system
 interface NotificationPreferences {
@@ -98,7 +99,7 @@ export class IntelligentPushSystem {
   // Schedule intelligent micro-advice notification
   async scheduleAdviceNotification(
     userId: string,
-    lifeScore: LifeScoreV2,
+    lifeScore: AdvancedLifeScore,
     metrics: HealthMetrics,
     userProfile: UserProfile,
     preferences: NotificationPreferences,
@@ -414,7 +415,7 @@ export class IntelligentPushSystem {
 
   // Build empathetic context for message generation
   private buildEmpatheticContext(
-    lifeScore: LifeScoreV2,
+    lifeScore: AdvancedLifeScore,
     metrics: HealthMetrics,
     userProfile: UserProfile,
     preferences: NotificationPreferences
@@ -433,13 +434,16 @@ export class IntelligentPushSystem {
   }
 
   // Determine intervention type based on current state
-  private determineInterventionType(lifeScore: LifeScoreV2, metrics: HealthMetrics): string {
-    const { stress, energy, sleep, overall } = lifeScore;
+  private determineInterventionType(lifeScore: AdvancedLifeScore, metrics: HealthMetrics): string {
+    const stress = metrics.stress;
+    const energy = lifeScore.breakdown.activity_score;
+    const sleep = lifeScore.breakdown.sleep_score;
+    const overall = lifeScore.score;
 
-    if (stress >= 8 || overall <= 3) return 'stress_relief';
-    if (energy <= 3 && stress < 6) return 'energy_boost';
-    if (sleep <= 4 && this.isEveningTime()) return 'sleep_prep';
-    if (overall >= 7 && energy >= 7) return 'celebration';
+    if (stress >= 4 || overall <= 30) return 'stress_relief';
+    if (energy <= 30 && stress < 3) return 'energy_boost';
+    if (sleep <= 40 && this.isEveningTime()) return 'sleep_prep';
+    if (overall >= 70 && energy >= 70) return 'celebration';
     
     return 'mindfulness'; // Default
   }
