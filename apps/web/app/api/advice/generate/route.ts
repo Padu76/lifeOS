@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { MicroAdviceOrchestrator } from '../../../../../packages/core/orchestrator/microAdviceOrchestrator';
-import { LifeScoreV2Calculator } from '../../../../../packages/core/scoring/lifeScoreV2';
+import { MicroAdviceOrchestrator } from '../../../../../../packages/core/orchestrator/microAdviceOrchestrator';
+import { LifeScoreV2Calculator } from '../../../../../../packages/core/scoring/lifeScoreV2';
 
 interface SimpleSuggestion {
   id: string;
