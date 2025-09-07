@@ -233,7 +233,7 @@ async function getPreviousLifeScores(supabase: any, userId: string) {
       .order('date', { ascending: false })
       .limit(30);
 
-    return (scores || []).map(score => ({
+    return (scores || []).map((score: any) => ({
       date: score.date,
       score: score.score || 5,
       breakdown: {
