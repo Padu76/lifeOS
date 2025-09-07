@@ -529,7 +529,7 @@ export class SoftGamificationSystem {
           target_value: 1,
           time_period: 'day'
         },
-        celebration_style: 'encouraging',
+        celebration_style: 'gentle',
         personal_significance: 0.6
       });
     }
