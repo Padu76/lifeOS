@@ -3,7 +3,7 @@ import { AdvancedLifeScore, UserProfile } from '../scoring/lifeScoreV2';
 import { EmpatheticLanguageEngine } from './empatheticLanguageEngine';
 
 // Types for soft gamification system
-interface StreakData {
+export interface StreakData {
   type: 'consecutive' | 'pattern' | 'improvement' | 'consistency';
   current_count: number;
   best_count: number;
@@ -13,7 +13,7 @@ interface StreakData {
   celebration_pending: boolean;
 }
 
-interface PersonalizedAchievement {
+export interface PersonalizedAchievement {
   id: string;
   title: string;
   description: string;
@@ -26,7 +26,7 @@ interface PersonalizedAchievement {
   personal_significance: number; // 0-1 how meaningful for this user
 }
 
-interface AchievementCriteria {
+export interface AchievementCriteria {
   metric: string;
   comparison: 'greater_than' | 'less_than' | 'improved_by' | 'consistent_for';
   target_value: number;
@@ -34,7 +34,7 @@ interface AchievementCriteria {
   baseline_period?: number; // days to compare against
 }
 
-interface CelebrationMoment {
+export interface CelebrationMoment {
   id: string;
   type: 'streak_milestone' | 'achievement_earned' | 'progress_boost' | 'effort_recognition' | 'personal_best';
   message: string;
