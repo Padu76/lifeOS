@@ -497,8 +497,8 @@ export class MicroAdviceOrchestrator {
 
     const { score: overall, breakdown } = lifeScore;
     const stress = metrics.stress || 5;
-    const energy = breakdown?.activity_score || 50;
-    const sleep = breakdown?.sleep_score || 50;
+    const energy = breakdown?.energy || 50;
+    const sleep = breakdown?.sleep || 50;
     
     // Emergency situations
     if (stress >= 9 || overall <= 20) {
@@ -628,7 +628,7 @@ export class MicroAdviceOrchestrator {
     if (newAchievements.length > 0 || updatedStreaks.some(s => s.celebration_pending)) {
       const celebrationTarget = newAchievements[0] || updatedStreaks.find(s => s.celebration_pending);
       if (celebrationTarget) {
-        celebration = this.gamificationSystem.createCelebrationMoment(
+        const celebrationResult = this.gamificationSystem.createCelebrationMoment(
           celebrationTarget,
           {
             currentMood: this.languageEngine.analyzeEmotionalState(lifeScore, metrics),
@@ -637,6 +637,7 @@ export class MicroAdviceOrchestrator {
           },
           userProfile.motivation_profile
         );
+        celebration = celebrationResult || undefined;
       }
     }
 
