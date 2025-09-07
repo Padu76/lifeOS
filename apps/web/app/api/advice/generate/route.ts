@@ -462,7 +462,7 @@ function getDefaultHealthMetrics() {
     mood: 3,
     stress: 3,
     energy: 3,
-    source: 'default_values'
+    source: 'manual'
   };
 }
 
