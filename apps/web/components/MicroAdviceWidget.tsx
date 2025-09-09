@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Lightbulb, Clock, Target, RefreshCw } from 'lucide-react';
+import { supabase, callEdgeFunction, getCurrentUser } from '../lib/supabase';
 
 interface MicroAdvice {
   id: number;
@@ -21,46 +22,6 @@ interface MicroAdviceWidgetProps {
   autoRefresh?: boolean;
 }
 
-// Mock data per dimostrare il funzionamento
-const mockAdvices: MicroAdvice[] = [
-  {
-    id: 1,
-    message: "I tuoi livelli di energia sembrano bassi oggi. Una breve sessione di respirazione può aiutarti a ricentrarti e ritrovare focus.",
-    action: "Prova la respirazione 4-7-8 per 5 minuti",
-    duration_minutes: 5,
-    priority: 4,
-    tone: 'supportive',
-    timing_optimal: true,
-    suggestion_key: 'breathing-exercise',
-    generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 2,
-    message: "Hai completato il check-in per 3 giorni consecutivi! Questo è il momento perfetto per una camminata energizzante.",
-    action: "Fai una camminata di 10 minuti all'aria aperta",
-    duration_minutes: 10,
-    priority: 3,
-    tone: 'celebratory',
-    timing_optimal: true,
-    suggestion_key: '10min-walk',
-    generated_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 3,
-    message: "Il tuo stress level è aumentato negli ultimi giorni. Una sessione di meditazione guidata potrebbe essere molto benefica.",
-    action: "Inizia una meditazione di 5 minuti",
-    duration_minutes: 5,
-    priority: 5,
-    tone: 'gentle',
-    timing_optimal: false,
-    suggestion_key: 'guided-meditation',
-    generated_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString()
-  }
-];
-
 export default function MicroAdviceWidget({
   className = '',
   maxAdvices = 2,
@@ -70,35 +31,110 @@ export default function MicroAdviceWidget({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [interacting, setInteracting] = useState<number | null>(null);
+  const [user, setUser] = useState<any>(null);
+
+  // Carica utente corrente
+  useEffect(() => {
+    const loadUser = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      if (!currentUser) {
+        setError('Utente non autenticato');
+        setLoading(false);
+      }
+    };
+    loadUser();
+  }, []);
 
   const loadMicroAdvices = useCallback(async () => {
+    if (!user) return;
+    
     setLoading(true);
+    setError(null);
+    
     try {
-      // Simula chiamata API
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setAdvices(mockAdvices.slice(0, maxAdvices));
-      setError(null);
+      console.log('Calling generate-micro-advice Edge Function...');
+      
+      // Chiamata alla Edge Function per generare consigli personalizzati
+      const data = await callEdgeFunction('generate-micro-advice', {
+        user_id: user.id,
+        max_count: maxAdvices,
+        context: {
+          current_time: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        }
+      });
+
+      console.log('Edge Function response:', data);
+      
+      if (data && data.advice) {
+        setAdvices(data.advice.slice(0, maxAdvices));
+      } else {
+        setAdvices([]);
+      }
+      
     } catch (err: any) {
       console.error('Error loading micro advices:', err);
-      setError(err.message);
+      setError(err.message || 'Errore nel caricamento dei consigli');
+      
+      // Fallback: usa mock data se l'API fallisce
+      const mockAdvices: MicroAdvice[] = [
+        {
+          id: 1,
+          message: "I tuoi livelli di energia sembrano bassi oggi. Una breve sessione di respirazione può aiutarti a ricentrarti e ritrovare focus.",
+          action: "Prova la respirazione 4-7-8 per 5 minuti",
+          duration_minutes: 5,
+          priority: 4,
+          tone: 'supportive',
+          timing_optimal: true,
+          suggestion_key: 'breathing-exercise',
+          generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 2,
+          message: "Una breve camminata all'aria aperta può aumentare la tua energia e migliorare l'umore.",
+          action: "Fai una camminata di 10 minuti all'aria aperta",
+          duration_minutes: 10,
+          priority: 3,
+          tone: 'encouraging',
+          timing_optimal: true,
+          suggestion_key: '10min-walk',
+          generated_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+        }
+      ];
+      
+      setAdvices(mockAdvices.slice(0, maxAdvices));
     } finally {
       setLoading(false);
     }
-  }, [maxAdvices]);
+  }, [maxAdvices, user]);
 
   const updateAdviceStatus = async (adviceId: number, status: string) => {
+    if (!user) return;
+    
     setInteracting(adviceId);
 
     try {
-      // Simula chiamata API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log(`Updating advice ${adviceId} status to: ${status}`);
+      
+      // Chiamata alla Edge Function per gestire la risposta
+      await callEdgeFunction('handle-advice-response', {
+        user_id: user.id,
+        advice_id: adviceId,
+        response_type: status,
+        timestamp: new Date().toISOString()
+      });
 
-      // Remove the advice from the list if completed or dismissed
+      // Rimuovi il consiglio dalla lista se completato o respinto
       if (status === 'completed' || status === 'dismissed') {
         setAdvices(prev => prev.filter(a => a.id !== adviceId));
       }
+      
     } catch (err: any) {
       console.error('Error updating advice status:', err);
+      // Non mostrare errore all'utente per questa operazione
     } finally {
       setInteracting(null);
     }
@@ -111,14 +147,16 @@ export default function MicroAdviceWidget({
   };
 
   useEffect(() => {
-    loadMicroAdvices();
+    if (user) {
+      loadMicroAdvices();
 
-    // Auto refresh ogni 30 minuti se abilitato
-    if (autoRefresh) {
-      const interval = setInterval(loadMicroAdvices, 30 * 60 * 1000);
-      return () => clearInterval(interval);
+      // Auto refresh ogni 30 minuti se abilitato
+      if (autoRefresh) {
+        const interval = setInterval(loadMicroAdvices, 30 * 60 * 1000);
+        return () => clearInterval(interval);
+      }
     }
-  }, [loadMicroAdvices, autoRefresh]);
+  }, [loadMicroAdvices, autoRefresh, user]);
 
   const getToneStyles = (tone: string) => {
     switch (tone) {
@@ -161,6 +199,23 @@ export default function MicroAdviceWidget({
     }
   };
 
+  if (!user && !loading) {
+    return (
+      <div className={`p-6 bg-yellow-500/10 border border-yellow-400/20 rounded-lg text-center ${className}`}>
+        <div className="text-yellow-300 text-lg font-medium mb-2">Accesso richiesto</div>
+        <div className="text-yellow-200/80 text-sm mb-4">
+          Effettua il login per ricevere consigli AI personalizzati
+        </div>
+        <button
+          onClick={() => window.location.href = '/sign-in'}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:scale-105 transition-transform"
+        >
+          Accedi
+        </button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className={`animate-pulse ${className}`}>
@@ -177,12 +232,18 @@ export default function MicroAdviceWidget({
     );
   }
 
-  if (error) {
+  if (error && advices.length === 0) {
     return (
       <div className={`p-4 bg-red-500/10 border border-red-400/20 rounded-lg ${className}`}>
-        <div className="text-red-300 text-sm">
+        <div className="text-red-300 text-sm mb-3">
           Errore nel caricamento dei micro-consigli: {error}
         </div>
+        <button
+          onClick={loadMicroAdvices}
+          className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm transition-colors"
+        >
+          Riprova
+        </button>
       </div>
     );
   }
@@ -192,9 +253,15 @@ export default function MicroAdviceWidget({
       <div className={`p-6 text-center ${className}`}>
         <div className="text-3xl mb-2">🌟</div>
         <h3 className="text-lg font-medium text-white mb-1">Tutto sotto controllo!</h3>
-        <p className="text-sm text-white/60">
+        <p className="text-sm text-white/60 mb-4">
           Non ci sono micro-consigli al momento. L'AI genererà nuovi suggerimenti basati sui tuoi pattern.
         </p>
+        <button
+          onClick={loadMicroAdvices}
+          className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-4 py-2 rounded-lg text-sm transition-colors"
+        >
+          Aggiorna
+        </button>
       </div>
     );
   }
@@ -205,6 +272,11 @@ export default function MicroAdviceWidget({
         <div className="flex items-center gap-3">
           <Lightbulb className="w-6 h-6 text-blue-400" />
           <h3 className="text-xl font-bold text-white">Consigli AI Personalizzati</h3>
+          {error && (
+            <div className="text-xs text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">
+              Fallback attivo
+            </div>
+          )}
         </div>
         <button
           onClick={loadMicroAdvices}
@@ -301,17 +373,6 @@ export default function MicroAdviceWidget({
           </div>
         ))}
       </div>
-
-      {mockAdvices.length > maxAdvices && (
-        <div className="mt-6 text-center">
-          <button
-            className="text-sm text-blue-300 hover:text-blue-200 transition-colors"
-            onClick={() => window.location.href = '/suggestions'}
-          >
-            Vedi tutti i consigli ({mockAdvices.length - maxAdvices} in più) →
-          </button>
-        </div>
-      )}
 
       <style jsx>{`
         @keyframes slideInUp {
