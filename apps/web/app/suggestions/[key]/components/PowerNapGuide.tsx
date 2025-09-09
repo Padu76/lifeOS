@@ -14,6 +14,7 @@ export const PowerNapGuide: React.FC = () => {
   const [volume, setVolume] = useState(0.3);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const howlRef = useRef<Howl | null>(null);
+  const testHowlRef = useRef<Howl | null>(null);
 
   // Audio URLs - file reali caricati in /public/audio/
   const audioSources = {
@@ -23,6 +24,32 @@ export const PowerNapGuide: React.FC = () => {
     chimes: '/audio/chimes.mp3'
   };
 
+  // Funzione per fermare TUTTO l'audio
+  const stopAllAudio = () => {
+    // Ferma audio principale
+    if (howlRef.current) {
+      howlRef.current.stop();
+      howlRef.current.unload();
+      howlRef.current = null;
+    }
+    
+    // Ferma audio di test
+    if (testHowlRef.current) {
+      testHowlRef.current.stop();
+      testHowlRef.current.unload();
+      testHowlRef.current = null;
+    }
+    
+    // Ferma tutte le istanze Howl globali
+    if (typeof Howl !== 'undefined') {
+      try {
+        Howl.stop();
+      } catch (e) {
+        // Ignore error se non ci sono audio attivi
+      }
+    }
+  };
+
   useEffect(() => {
     if (isActive && timeLeft > 0) {
       intervalRef.current = setInterval(() => {
@@ -30,7 +57,7 @@ export const PowerNapGuide: React.FC = () => {
           if (time <= 1) {
             setIsActive(false);
             setPhase('wakeup');
-            stopAmbientSound();
+            stopAllAudio();
             playWakeupChimes();
             return 0;
           }
@@ -47,7 +74,7 @@ export const PowerNapGuide: React.FC = () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      stopAmbientSound();
+      stopAllAudio();
     };
   }, [isActive, timeLeft]);
 
@@ -61,39 +88,36 @@ export const PowerNapGuide: React.FC = () => {
     if (!soundEnabled || ambientSound === 'silence') return;
     
     try {
-      stopAmbientSound();
+      // STOP tutto prima di iniziare nuovo audio
+      stopAllAudio();
       
       const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
       if (!audioUrl) return;
 
-      howlRef.current = new Howl({
-        src: [audioUrl],
-        loop: true,
-        volume: volume,
-        html5: true,
-        onloaderror: (id, error) => {
-          console.warn('Audio loading error:', error);
-          // Fallback a suono sintetico semplice se necessario
-          createFallbackSound(ambientSound);
-        },
-        onplayerror: (id, error) => {
-          console.warn('Audio play error:', error);
-          createFallbackSound(ambientSound);
-        }
-      });
+      // Attendi un momento per assicurarsi che tutto sia fermato
+      setTimeout(() => {
+        howlRef.current = new Howl({
+          src: [audioUrl],
+          loop: true,
+          volume: volume,
+          html5: true,
+          preload: true,
+          onloaderror: (id, error) => {
+            console.warn('Audio loading error:', error);
+            createFallbackSound(ambientSound);
+          },
+          onplayerror: (id, error) => {
+            console.warn('Audio play error:', error);
+            createFallbackSound(ambientSound);
+          }
+        });
 
-      howlRef.current.play();
+        howlRef.current.play();
+      }, 100);
+      
     } catch (error) {
       console.warn('Howler not supported:', error);
       createFallbackSound(ambientSound);
-    }
-  };
-
-  const stopAmbientSound = () => {
-    if (howlRef.current) {
-      howlRef.current.stop();
-      howlRef.current.unload();
-      howlRef.current = null;
     }
   };
 
@@ -108,24 +132,76 @@ export const PowerNapGuide: React.FC = () => {
     if (!soundEnabled) return;
     
     try {
-      const chimes = new Howl({
-        src: [audioSources.chimes],
-        volume: volume * 0.8,
-        html5: true,
-        onloaderror: () => {
-          // Fallback a chimes sintetici se il file non carica
-          createSyntheticChimes();
-        }
-      });
+      // Stop tutto prima delle campanelle
+      stopAllAudio();
       
-      chimes.play();
+      setTimeout(() => {
+        const chimes = new Howl({
+          src: [audioSources.chimes],
+          volume: volume * 0.8,
+          html5: true,
+          preload: true,
+          onloaderror: () => {
+            createSyntheticChimes();
+          },
+          onend: () => {
+            // Cleanup automatico dopo riproduzione
+            chimes.unload();
+          }
+        });
+        
+        chimes.play();
+      }, 200);
+      
     } catch (error) {
       console.warn('Chimes not supported:', error);
       createSyntheticChimes();
     }
   };
 
-  // Fallback per quando Howler.js non funziona o file audio non disponibili
+  const testAmbientSound = () => {
+    if (!soundEnabled || ambientSound === 'silence') return;
+    
+    // STOP tutto prima del test
+    stopAllAudio();
+    
+    const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
+    if (!audioUrl) return;
+
+    setTimeout(() => {
+      testHowlRef.current = new Howl({
+        src: [audioUrl],
+        loop: false,
+        volume: volume,
+        html5: true,
+        preload: true,
+        onloaderror: (id, error) => {
+          console.warn('Test audio loading error:', error);
+        },
+        onend: () => {
+          // Cleanup automatico dopo test
+          if (testHowlRef.current) {
+            testHowlRef.current.unload();
+            testHowlRef.current = null;
+          }
+        }
+      });
+
+      testHowlRef.current.play();
+      
+      // Stop automatico dopo 3 secondi
+      setTimeout(() => {
+        if (testHowlRef.current) {
+          testHowlRef.current.stop();
+          testHowlRef.current.unload();
+          testHowlRef.current = null;
+        }
+      }, 3000);
+      
+    }, 100);
+  };
+
+  // Fallback per quando Howler.js non funziona
   const createFallbackSound = (type: string) => {
     if (!soundEnabled) return;
     
@@ -138,7 +214,6 @@ export const PowerNapGuide: React.FC = () => {
 
       switch (type) {
         case 'rain':
-          // Pink noise semplice per pioggia
           const bufferSize = 4096;
           const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
           const output = buffer.getChannelData(0);
@@ -160,7 +235,6 @@ export const PowerNapGuide: React.FC = () => {
           break;
 
         case 'ocean':
-          // Onda sinusoidale lenta per oceano
           const oscillator = audioContext.createOscillator();
           const gain = audioContext.createGain();
           
@@ -174,7 +248,6 @@ export const PowerNapGuide: React.FC = () => {
           break;
 
         case 'forest':
-          // Toni multipli dolci per foresta
           const frequencies = [220, 330, 440];
           frequencies.forEach((freq, index) => {
             const osc = audioContext.createOscillator();
@@ -224,31 +297,23 @@ export const PowerNapGuide: React.FC = () => {
     }
   };
 
-  const testAmbientSound = () => {
-    if (!soundEnabled || ambientSound === 'silence') return;
-    
-    stopAmbientSound();
-    setTimeout(() => {
-      playAmbientSound();
-      setTimeout(() => stopAmbientSound(), 3000);
-    }, 100);
-  };
-
   const startTimer = () => {
+    stopAllAudio(); // Stop tutto prima di iniziare
     setTimeLeft(customTime * 60);
     setIsActive(true);
     setPhase('timer');
     if (soundEnabled) {
-      setTimeout(() => playAmbientSound(), 200);
+      setTimeout(() => playAmbientSound(), 300);
     }
   };
 
   const pauseTimer = () => {
-    setIsActive(!isActive);
     if (isActive) {
-      stopAmbientSound();
-    } else if (soundEnabled) {
-      playAmbientSound();
+      stopAllAudio();
+    }
+    setIsActive(!isActive);
+    if (!isActive && soundEnabled) {
+      setTimeout(() => playAmbientSound(), 200);
     }
   };
 
@@ -256,17 +321,25 @@ export const PowerNapGuide: React.FC = () => {
     setIsActive(false);
     setTimeLeft(customTime * 60);
     setPhase('preparation');
-    stopAmbientSound();
+    stopAllAudio();
   };
 
   const completeSession = () => {
     setPhase('completed');
-    stopAmbientSound();
+    stopAllAudio();
   };
+
+  // Cleanup quando cambia il suono ambientale
+  useEffect(() => {
+    if (phase === 'timer' && isActive && soundEnabled) {
+      stopAllAudio();
+      setTimeout(() => playAmbientSound(), 200);
+    }
+  }, [ambientSound]);
 
   useEffect(() => {
     return () => {
-      stopAmbientSound();
+      stopAllAudio();
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
@@ -317,7 +390,10 @@ export const PowerNapGuide: React.FC = () => {
                   ].map(sound => (
                     <button
                       key={sound.key}
-                      onClick={() => setAmbientSound(sound.key)}
+                      onClick={() => {
+                        stopAllAudio(); // Stop tutto quando cambi suono
+                        setAmbientSound(sound.key);
+                      }}
                       className={`p-3 rounded-lg transition-all flex items-center gap-3 ${
                         ambientSound === sound.key
                           ? 'bg-purple-500/30 text-purple-200 border border-purple-400/50'
@@ -357,7 +433,10 @@ export const PowerNapGuide: React.FC = () => {
               <div className="flex items-center justify-between">
                 <span className="text-white font-medium">Suoni abilitati</span>
                 <button
-                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  onClick={() => {
+                    stopAllAudio(); // Stop tutto quando disabiliti audio
+                    setSoundEnabled(!soundEnabled);
+                  }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                     soundEnabled
                       ? 'bg-green-500/30 text-green-200 border border-green-400/50'
@@ -486,7 +565,7 @@ export const PowerNapGuide: React.FC = () => {
               onClick={() => {
                 setSoundEnabled(!soundEnabled);
                 if (soundEnabled) {
-                  stopAmbientSound();
+                  stopAllAudio();
                 } else {
                   playAmbientSound();
                 }
