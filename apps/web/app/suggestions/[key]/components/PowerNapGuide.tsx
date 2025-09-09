@@ -199,7 +199,8 @@ export const PowerNapGuide: React.FC = () => {
 
       const playPromise = testHowlRef.current.play();
       if (playPromise !== undefined && typeof playPromise === 'object' && 'then' in playPromise) {
-        playPromise.catch((error) => {
+        // Cast a Promise per TypeScript
+        (playPromise as Promise<any>).catch((error) => {
           console.warn(`Test play failed for ${ambientSound}:`, error);
           createFallbackSound(ambientSound);
         });
