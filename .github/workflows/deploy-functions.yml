@@ -1,0 +1,38 @@
+name: Deploy Edge Functions
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'supabase/functions/**'
+  workflow_dispatch:
+
+jobs:
+  deploy-functions:
+    name: Deploy Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      
+      - name: Deploy to Supabase
+        run: |
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      
+      - name: Test deployed functions
+        run: |
+          echo "Testing deployed functions..."
+          curl -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/generate-micro-advice" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"current_metrics":{"timestamp":"2025-01-15T14:30:00Z","stress_level":5,"energy_level":7},"current_life_score":{"stress":5,"energy":7,"sleep":8,"overall":7}}' \
+            --fail-with-body
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

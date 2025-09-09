@@ -1,0 +1,55 @@
+export const LIFEOS_CONSTANTS = {
+  // Timing constants
+  MIN_INTERVENTION_GAP_MINUTES: 90,
+  MAX_DAILY_INTERVENTIONS: 5,
+  
+  // Scoring constants
+  LIFE_SCORE_MIN: 1,
+  LIFE_SCORE_MAX: 10,
+  HIGH_STRESS_THRESHOLD: 7,
+  LOW_ENERGY_THRESHOLD: 3,
+  POOR_SLEEP_THRESHOLD: 4,
+  
+  // Engagement constants
+  HIGH_ENGAGEMENT_COMPLETION_RATE: 0.8,
+  LOW_ENGAGEMENT_COMPLETION_RATE: 0.3,
+  BURNOUT_RISK_DISMISSAL_THRESHOLD: 5,
+  
+  // Achievement constants
+  STREAK_CELEBRATION_INTERVALS: [3, 7, 14, 30, 60, 100],
+  COMPLETION_MILESTONES: [5, 10, 25, 50, 100, 250, 500],
+  
+  // Notification constants
+  QUIET_HOURS_DEFAULT_START: '22:00',
+  QUIET_HOURS_DEFAULT_END: '07:00',
+  
+  // Pattern learning constants
+  MIN_SESSIONS_FOR_PATTERNS: 10,
+  EFFECTIVENESS_THRESHOLD: 0.6,
+  
+  // Time zones and scheduling
+  DEFAULT_TIMEZONE: 'UTC',
+  SCHEDULING_BUFFER_MINUTES: 5,
+  
+  // API limits
+  MAX_PAGINATION_LIMIT: 100,
+  DEFAULT_PAGINATION_LIMIT: 20,
+  
+  // Cache durations (in seconds)
+  USER_PROFILE_CACHE_DURATION: 300, // 5 minutes
+  ANALYTICS_CACHE_DURATION: 1800,   // 30 minutes
+  
+  // Validation limits
+  MAX_FOCUS_AREAS: 5,
+  MAX_CUSTOM_GOALS: 10,
+  MAX_FEEDBACK_LENGTH: 500,
+  
+  // Feature flags
+  FEATURES: {
+    ADVANCED_ANALYTICS: true,
+    PUSH_NOTIFICATIONS: true,
+    ACHIEVEMENT_SHARING: false,
+    AI_INSIGHTS: true,
+    EXPORT_DATA: true
+  }
+} as const;

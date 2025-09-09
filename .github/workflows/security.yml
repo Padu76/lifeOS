@@ -1,0 +1,76 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run npm audit
+      run: npm audit --audit-level moderate
+      continue-on-error: false
+      
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+        
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high
+        
+    - name: Validate environment variables
+      run: |
+        echo "Checking for required environment variables..."
+        # Check that sensitive vars are not in code
+        if grep -r "SUPABASE_ANON_KEY.*=" --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules .; then
+          echo "❌ Found hardcoded Supabase keys in source code"
+          exit 1
+        fi
+        
+        if grep -r "SUPABASE_URL.*=" --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules .; then
+          echo "❌ Found hardcoded Supabase URL in source code"
+          exit 1
+        fi
+        
+        echo "✅ No hardcoded secrets found"
+        
+    - name: Check for TODO security items
+      run: |
+        if grep -r "TODO.*security\|FIXME.*security\|XXX.*security" --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules .; then
+          echo "⚠️ Found security-related TODOs that need attention"
+          exit 1
+        fi
+        
+    - name: Validate Supabase policies
+      run: |
+        echo "Checking Supabase security policies..."
+        if [ -f "supabase/migrations" ]; then
+          # Check that RLS is enabled on tables
+          if ! grep -r "ALTER TABLE.*ENABLE ROW LEVEL SECURITY" supabase/migrations/; then
+            echo "⚠️ Some tables might not have RLS enabled"
+          fi
+        fi

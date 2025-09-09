@@ -1,216 +1,419 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../lib/supabase';
 
-type LifeScore = { date: string; score: number };
-type Activity = { date: string; completed: boolean | null };
+import React, { useRef, useEffect, useState } from 'react';
+import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight } from 'lucide-react';
 
-function fmt(d: string){ const [y,m,day] = d.split('-').map(Number); return `${String(day).padStart(2,'0')}/${String(m).padStart(2,'0')}`; }
-function rangeDays(n:number){ const out:string[]=[]; const today=new Date(); for(let i=n-1;i>=0;i--){const d=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-i)); out.push(d.toISOString().slice(0,10));} return out; }
-
-function movingAvg(series: {x:string;y:number}[], window=7){
-  const out = series.map((_,i)=>{
-    const start = Math.max(0, i-window+1);
-    const slice = series.slice(start, i+1).map(p=>p.y).filter(v=>v>0);
-    const avg = slice.length ? Math.round(slice.reduce((s,v)=>s+v,0)/slice.length) : 0;
-    return { x: series[i].x, y: avg };
-  });
-  return out;
+interface MetricData {
+  label: string;
+  value: number;
+  trend: 'up' | 'down' | 'stable';
+  change: number;
 }
 
-// Interactive LineChart with tooltip + optional overlay series
-function LineChart({ data, overlay }: { data: { x: string; y: number }[], overlay?: { x: string; y: number }[] }){
-  const height=200, width=760, padding=36;
-  const ys=[...data.map(d=>d.y), ...(overlay?overlay.map(o=>o.y):[])];
-  const minY=Math.min(0,...ys), maxY=Math.max(100,...ys);
-  const xStep=(width-padding*2)/Math.max(1,data.length-1);
-  const toXY=(i:number,y:number)=>{const x=padding+i*xStep; const ny=(y-minY)/(maxY-minY||1); const yy=height-padding-ny*(height-padding*1.8); return [x,yy];};
+interface ChartData {
+  day: string;
+  score: number;
+  stress: number;
+  energy: number;
+  sleep: number;
+}
 
-  const [hover, setHover] = useState<{i:number, x:number, y:number} | null>(null);
+const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 0.1) => {
+  const [isIntersecting, setIsIntersecting] = useState(false);
 
-  const path = data.map((d,i)=>{const [x,y]=toXY(i,d.y); return i===0?`M ${x} ${y}`:`L ${x} ${y}`;}).join(' ');
-  const overlayPath = overlay ? overlay.map((d,i)=>{const [x,y]=toXY(i,d.y); return i===0?`M ${x} ${y}`:`L ${x} ${y}`;}).join(' ') : '';
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const element = ref.current;
+    if (!element) return;
 
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = (e.target as SVGElement).closest('svg')!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const i = Math.round((mx - padding)/xStep);
-    if (i<0 || i>=data.length) { setHover(null); return; }
-    const [x,y] = toXY(i, data[i].y);
-    setHover({ i, x, y });
-  };
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsIntersecting(entry.isIntersecting),
+      { threshold }
+    );
+
+    observer.observe(element);
+    return () => observer.unobserve(element);
+  }, [ref, threshold]);
+
+  return isIntersecting;
+};
+
+const LifeScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 120 }) => {
+  const [mounted, setMounted] = useState(false);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(ringRef);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <div className={`w-${size} h-${size} bg-white/10 rounded-full animate-pulse`} />;
+
+  const circumference = 2 * Math.PI * 45;
+  const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height}
-         onMouseMove={onMove} onMouseLeave={()=>setHover(null)}
-         style={{border:'1px solid #eee', borderRadius:10, background:'#fff'}}>
-
-      {/* axes labels x */}
-      {data.map((d,i)=>{const [x] = toXY(i,d.y); return <text key={'t'+i} x={x} y={height-8} fontSize="10" textAnchor="middle" fill="#6b7280">{fmt(d.x)}</text>;})}
-
-      {/* main line */}
-      <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
-      {data.map((d,i)=>{const [x,y]=toXY(i,d.y); return <circle key={'c'+i} cx={x} cy={y} r="3" />;})}
-
-      {/* overlay moving average */}
-      {overlay && <path d={overlayPath} fill="none" strokeDasharray="4 4" stroke="currentColor" strokeWidth="2" opacity="0.6" />}
-
-      {/* tooltip */}
-      {hover && (
-        <g>
-          <line x1={hover.x} x2={hover.x} y1={padding*0.4} y2={height-padding*0.4} stroke="#9ca3af" strokeDasharray="3 3"/>
-          <circle cx={hover.x} cy={hover.y} r="4" fill="#111827" />
-          <rect x={hover.x+8} y={Math.max(hover.y-22, 8)} rx="6" ry="6" width="120" height="40" fill="#111827" opacity="0.9" />
-          <text x={hover.x+16} y={Math.max(hover.y-6, 22)} fontSize="11" fill="#fff">
-            {fmt(data[hover.i].x)} • {data[hover.i].y}
-          </text>
-          {overlay && <text x={hover.x+16} y={Math.max(hover.y+10, 38)} fontSize="11" fill="#c7d2fe">
-            MA7: {overlay[hover.i].y}
-          </text>}
-        </g>
-      )}
-    </svg>
-  );
-}
-
-function BarChart({ data }: { data: { x: string; y: number }[] }){
-  const height=200,width=760,padding=36,maxY=Math.max(1,...data.map(d=>d.y));
-  const xStep=(width-padding*2)/data.length;
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height}
-         style={{border:'1px solid #eee', borderRadius:10, background:'#fff'}}>
-      {data.map((d,i)=>{
-        const barW=Math.max(6,xStep*0.6);
-        const x=padding+i*xStep+(xStep-barW)/2;
-        const h=(d.y/maxY)*(height-padding*1.8);
-        const y=height-padding-h;
-        return <rect key={i} x={x} y={y} width={barW} height={h} />;
-      })}
-      {data.map((d,i)=>{
-        const x=padding+i*xStep+xStep/2;
-        return <text key={'t'+i} x={x} y={height-8} fontSize="10" textAnchor="middle" fill="#6b7280">{fmt(d.x)}</text>;
-      })}
-    </svg>
-  );
-}
-
-function downloadCSV(filename: string, rows: {date: string, lifescore?: number, completed_count?: number}[]) {
-  const header = ['date','lifescore','completed_count'];
-  const csv = [header.join(',')].concat(
-    rows.map(r => [r.date, r.lifescore ?? '', r.completed_count ?? ''].join(','))
-  ).join('\\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
-
-export default function DashboardPage(){
-  const [loading,setLoading]=useState(true);
-  const [msg,setMsg]=useState<string|null>(null);
-  const [life,setLife]=useState<LifeScore[]>([]);
-  const [acts,setActs]=useState<Activity[]>([]);
-  const [range,setRange]=useState<7|14|30>(14);
-  const [showMA, setShowMA] = useState(true);
-
-  useEffect(()=>{(async()=>{
-    setLoading(true); setMsg(null);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setMsg('Non sei autenticato.'); setLoading(false); return; }
-    const user = session.user;
-
-    const from = new Date(Date.now() - 1000*60*60*24*30).toISOString().slice(0,10);
-    const { data: l, error: e1 } = await supabase
-      .from('lifescores')
-      .select('date, score')
-      .eq('user_id', user.id)
-      .gte('date', from)
-      .order('date', { ascending: true });
-    if (e1) { setMsg(e1.message); setLoading(false); return; }
-
-    const { data: a, error: e2 } = await supabase
-      .from('user_suggestions')
-      .select('date, completed')
-      .eq('user_id', user.id)
-      .gte('date', from);
-    if (e2) { setMsg(e2.message); setLoading(false); return; }
-
-    setLife((l??[]) as LifeScore[]);
-    setActs((a??[]) as Activity[]);
-    setLoading(false);
-  })();},[]);
-
-  const days = useMemo(()=>rangeDays(range),[range]);
-
-  const lifeSeries = useMemo(()=>{
-    const map = new Map(life.map(d=>[d.date,d.score]));
-    return days.map(d => ({ x: d, y: map.get(d) ?? 0 }));
-  }, [life, days]);
-
-  const lifeMA = useMemo(()=> movingAvg(lifeSeries, 7), [lifeSeries]);
-
-  const completedSeries = useMemo(()=>{
-    const count = new Map<string, number>();
-    acts.forEach(a => count.set(a.date, (count.get(a.date) ?? 0) + (a.completed ? 1 : 0)));
-    return days.map(d => ({ x: d, y: count.get(d) ?? 0 }));
-  }, [acts, days]);
-
-  const avg = useMemo(()=>{
-    const vals = lifeSeries.map(d=>d.y).filter(n=>n>0);
-    if (!vals.length) return 0;
-    return Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
-  }, [lifeSeries]);
-
-  const exportCSV = () => {
-    const merged = days.map(d => ({
-      date: d,
-      lifescore: lifeSeries.find(x => x.x === d)?.y ?? 0,
-      completed_count: completedSeries.find(x => x.x === d)?.y ?? 0,
-    }));
-    downloadCSV(`dashboard_${range}d.csv`, merged);
-  };
-
-  return (
-    <main style={{maxWidth:980, margin:'32px auto', padding:'0 20px', fontFamily:'system-ui, -apple-system, Segoe UI, Roboto, sans-serif'}}>
-      <h1 style={{marginBottom:6}}>Dashboard</h1>
-      <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap'}}>
-        <span style={{opacity:.8}}>Periodo:</span>
-        {[7,14,30].map(r => (
-          <button key={r} onClick={()=>setRange(r as 7|14|30)} style={{padding:'6px 10px', border:'1px solid #e5e7eb', borderRadius:8, background: r===range ? '#f3f4f6' : 'white'}}>
-            {r} giorni
-          </button>
-        ))}
-        <label style={{display:'flex', alignItems:'center', gap:6, marginLeft:12}}>
-          <input type="checkbox" checked={showMA} onChange={()=>setShowMA(s=>!s)} />
-          Mostra media mobile 7gg
-        </label>
-        <button onClick={exportCSV} style={{marginLeft:'auto', padding:'6px 10px', border:'1px solid #e5e7eb', borderRadius:8}}>⬇️ Export CSV</button>
-      </div>
-
-      {loading && <p>Carico…</p>}
-      {msg && <p style={{background:'#FEF3C7', border:'1px solid #FDE68A', padding:12, borderRadius:10}}>{msg}</p>}
-
-      {!loading && !msg && (
-        <div style={{display:'grid', gap:16}}>
-          <section style={{border:'1px solid #eee', borderRadius:12, padding:16}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8}}>
-              <h3 style={{margin:0}}>LifeScore</h3>
-              <div style={{opacity:.8}}>Media ({range}gg): <strong>{avg}</strong></div>
-            </div>
-            <LineChart data={lifeSeries} overlay={showMA ? lifeMA : undefined} />
-          </section>
-
-          <section style={{border:'1px solid #eee', borderRadius:12, padding:16}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8}}>
-              <h3 style={{margin:0}}>Attività completate</h3>
-              <div style={{opacity:.8}}>Somma ({range}gg): <strong>{completedSeries.reduce((s,d)=>s+d.y,0)}</strong></div>
-            </div>
-            <BarChart data={completedSeries} />
-          </section>
+    <div ref={ringRef} className={`relative`} style={{ width: size, height: size }}>
+      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+        <circle
+          cx="50"
+          cy="50"
+          r="45"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth="8"
+          fill="none"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r="45"
+          stroke="url(#scoreGradient)"
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={isVisible ? strokeDashoffset : circumference}
+          className="transition-all duration-2000 ease-out"
+        />
+        <defs>
+          <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="50%" stopColor="#8B5CF6" />
+            <stop offset="100%" stopColor="#06B6D4" />
+          </linearGradient>
+        </defs>
+      </svg>
+      
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-white">{score}</div>
+          <div className="text-xs text-white/60">LifeScore</div>
         </div>
-      )}
-    </main>
+      </div>
+    </div>
   );
-}
+};
+
+const MetricCard: React.FC<{ 
+  metric: MetricData; 
+  icon: React.ReactNode; 
+  color: string;
+  delay: number;
+}> = ({ metric, icon, color, delay }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(cardRef);
+
+  return (
+    <div
+      ref={cardRef}
+      className={`group bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:border-white/40 transition-all duration-700 hover:scale-105 ${
+        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'
+      }`}
+      style={{ transitionDelay: isVisible ? `${delay}ms` : '0ms' }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className={`flex items-center justify-center w-12 h-12 bg-gradient-to-r ${color} rounded-xl group-hover:rotate-12 transition-transform duration-300`}>
+          {icon}
+        </div>
+        <div className={`text-sm px-2 py-1 rounded-full ${
+          metric.trend === 'up' ? 'bg-green-500/20 text-green-400' :
+          metric.trend === 'down' ? 'bg-red-500/20 text-red-400' :
+          'bg-gray-500/20 text-gray-400'
+        }`}>
+          {metric.trend === 'up' ? '↑' : metric.trend === 'down' ? '↓' : '→'} {metric.change}%
+        </div>
+      </div>
+      
+      <div className="text-2xl font-bold text-white mb-1">{metric.value}</div>
+      <div className="text-white/70 text-sm">{metric.label}</div>
+    </div>
+  );
+};
+
+const MiniChart: React.FC<{ data: ChartData[]; type: 'score' | 'stress' | 'energy' | 'sleep' }> = ({ data, type }) => {
+  const maxValue = Math.max(...data.map(d => d[type]));
+  const points = data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - (d[type] / maxValue) * 100}`).join(' ');
+
+  return (
+    <div className="w-full h-20">
+      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polyline
+          points={points}
+          fill="none"
+          stroke="url(#miniGradient)"
+          strokeWidth="2"
+          className="drop-shadow-sm"
+        />
+        <defs>
+          <linearGradient id="miniGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#8B5CF6" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+};
+
+const DashboardPage: React.FC = () => {
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    
+    if (typeof window === 'undefined') return;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const weekData: ChartData[] = [
+    { day: 'Lun', score: 85, stress: 6, energy: 7, sleep: 8 },
+    { day: 'Mar', score: 82, stress: 7, energy: 6, sleep: 7 },
+    { day: 'Mer', score: 88, stress: 5, energy: 8, sleep: 8 },
+    { day: 'Gio', score: 90, stress: 4, energy: 9, sleep: 9 },
+    { day: 'Ven', score: 87, stress: 6, energy: 7, sleep: 8 },
+    { day: 'Sab', score: 89, stress: 5, energy: 8, sleep: 8 },
+    { day: 'Dom', score: 87, stress: 5, energy: 7, sleep: 9 },
+  ];
+
+  const metrics: MetricData[] = [
+    { label: 'Stress Level', value: 5, trend: 'down', change: 12 },
+    { label: 'Energy Level', value: 7, trend: 'up', change: 8 },
+    { label: 'Sleep Quality', value: 8, trend: 'stable', change: 2 },
+    { label: 'Focus Score', value: 6, trend: 'up', change: 15 },
+  ];
+
+  const recentActivities = [
+    { id: 1, activity: 'Respirazione 4-7-8 completata', time: '2 ore fa', type: 'success' },
+    { id: 2, activity: 'Camminata energizzante (15 min)', time: '4 ore fa', type: 'energy' },
+    { id: 3, activity: 'Meditazione serale', time: 'Ieri', type: 'sleep' },
+    { id: 4, activity: 'Sessione Pomodoro completata', time: 'Ieri', type: 'focus' },
+  ];
+
+  return (
+    <div className="min-h-screen overflow-x-hidden">
+      {/* Fixed Background */}
+      <div 
+        className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900"
+        style={{
+          background: mounted 
+            ? `
+              radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, 
+                rgba(147, 197, 253, 0.1) 0%, 
+                transparent 50%),
+              linear-gradient(135deg, 
+                #0f172a 0%, 
+                #1e1b4b 25%, 
+                #312e81 50%, 
+                #1e1b4b 75%, 
+                #0f172a 100%)
+            `
+            : 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #312e81 50%, #1e1b4b 75%, #0f172a 100%)'
+        }}
+      />
+
+      {/* Navigation */}
+      <nav className="relative z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              LifeOS
+            </div>
+            <div className="hidden md:flex space-x-8 text-white/80">
+              <a href="/" className="hover:text-white transition-colors">Home</a>
+              <a href="/suggestions" className="hover:text-white transition-colors">Suggestions</a>
+              <a href="/dashboard" className="text-white font-semibold">Dashboard</a>
+              <a href="/profile" className="hover:text-white transition-colors">Profilo</a>
+            </div>
+            <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+              Logout
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Header */}
+      <section className="relative pt-20 pb-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+                La tua
+                <span className="block bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent">
+                  Dashboard
+                </span>
+              </h1>
+              <p className="text-xl text-white/70 max-w-2xl">
+                Monitora i tuoi progressi e scopri insights personalizzati sul tuo benessere
+              </p>
+            </div>
+            
+            {/* Life Score Ring */}
+            <div className="flex-shrink-0">
+              <LifeScoreRing score={87} size={160} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Metrics Grid */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+            <Activity className="w-6 h-6 text-blue-400" />
+            Metriche principali
+          </h2>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            <MetricCard
+              metric={metrics[0]}
+              icon={<Brain className="w-6 h-6 text-white" />}
+              color="from-blue-500 to-purple-600"
+              delay={0}
+            />
+            <MetricCard
+              metric={metrics[1]}
+              icon={<Zap className="w-6 h-6 text-white" />}
+              color="from-orange-500 to-red-600"
+              delay={100}
+            />
+            <MetricCard
+              metric={metrics[2]}
+              icon={<Moon className="w-6 h-6 text-white" />}
+              color="from-indigo-500 to-purple-600"
+              delay={200}
+            />
+            <MetricCard
+              metric={metrics[3]}
+              icon={<Target className="w-6 h-6 text-white" />}
+              color="from-green-500 to-blue-600"
+              delay={300}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Charts Section */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Weekly Trend */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-6">
+                <TrendingUp className="w-6 h-6 text-green-400" />
+                <h3 className="text-xl font-bold text-white">Andamento settimanale</h3>
+              </div>
+              
+              <div className="space-y-4">
+                {[
+                  { label: 'LifeScore', type: 'score' as const, color: 'text-blue-400' },
+                  { label: 'Stress', type: 'stress' as const, color: 'text-red-400' },
+                  { label: 'Energia', type: 'energy' as const, color: 'text-orange-400' },
+                  { label: 'Sonno', type: 'sleep' as const, color: 'text-purple-400' },
+                ].map((item) => (
+                  <div key={item.type} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className={`text-sm font-medium ${item.color}`}>{item.label}</span>
+                      <span className="text-white text-sm">{weekData[weekData.length - 1][item.type]}</span>
+                    </div>
+                    <MiniChart data={weekData} type={item.type} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent Activity */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-6">
+                <Calendar className="w-6 h-6 text-purple-400" />
+                <h3 className="text-xl font-bold text-white">Attività recenti</h3>
+              </div>
+              
+              <div className="space-y-4">
+                {recentActivities.map((activity) => (
+                  <div key={activity.id} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
+                    <div className={`w-3 h-3 rounded-full ${
+                      activity.type === 'success' ? 'bg-green-400' :
+                      activity.type === 'energy' ? 'bg-orange-400' :
+                      activity.type === 'sleep' ? 'bg-purple-400' :
+                      'bg-blue-400'
+                    }`} />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">{activity.activity}</div>
+                      <div className="text-white/60 text-sm">{activity.time}</div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-white/40" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Achievements */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="flex items-center gap-3 mb-8">
+            <Award className="w-6 h-6 text-yellow-400" />
+            <h2 className="text-2xl font-bold text-white">Achievements recenti</h2>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              { title: 'Settimana perfetta', description: '7 giorni consecutivi di consigli completati', icon: '🏆', unlocked: true },
+              { title: 'Maestro del respiro', description: '50 sessioni di respirazione completate', icon: '🧘', unlocked: true },
+              { title: 'Energia stabile', description: 'Mantieni energia >7 per 5 giorni', icon: '⚡', unlocked: false },
+            ].map((achievement, index) => (
+              <div key={index} className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 ${achievement.unlocked ? 'opacity-100' : 'opacity-60'}`}>
+                <div className="text-4xl mb-4">{achievement.icon}</div>
+                <h3 className="text-lg font-bold text-white mb-2">{achievement.title}</h3>
+                <p className="text-white/70 text-sm">{achievement.description}</p>
+                {achievement.unlocked && (
+                  <div className="mt-4 text-green-400 text-sm font-medium">✓ Sbloccato</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Actions */}
+      <section className="relative py-20 px-6">
+        <div className="container mx-auto max-w-4xl text-center">
+          <div className="bg-white/5 backdrop-blur-lg rounded-3xl p-12 border border-white/10">
+            <h2 className="text-3xl font-bold text-white mb-6">
+              Pronto per i prossimi consigli?
+            </h2>
+            <p className="text-xl text-white/70 mb-8">
+              Continua il tuo percorso di benessere con suggerimenti personalizzati
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <a 
+                href="/suggestions"
+                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform"
+              >
+                Nuovi Consigli
+              </a>
+              <a 
+                href="/profile"
+                className="border-2 border-white/30 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 transition-colors"
+              >
+                Aggiorna Profilo
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export default DashboardPage;
