@@ -33,7 +33,7 @@ const mockUserProfile = {
 };
 
 // Script di meditazione personalizzati
-const getMeditationScript = (profile, duration) => {
+const getMeditationScript = (profile: any, duration: number) => {
   const scripts = {
     high_stress_beginner: [
       { time: 0, text: "Benvenuto. Trova una posizione comoda e chiudi gli occhi.", type: "intro" },
