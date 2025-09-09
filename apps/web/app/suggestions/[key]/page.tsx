@@ -1,8 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Play, Pause, CheckCircle, Clock, Zap, Brain, Moon, Heart, Activity, Volume2, VolumeX, RotateCcw } from 'lucide-react';
-import Link from 'next/link';
 
 function MMSS(total: number) {
   const m = Math.floor(total / 60);
@@ -23,8 +21,23 @@ function useTick(seconds: number) {
   return { sec, isRunning, setIsRunning };
 }
 
+// Interfacce TypeScript per il profilo utente
+interface UserProfile {
+  stressLevel: 'low' | 'medium' | 'high';
+  energyLevel: 'low' | 'medium' | 'high';
+  experienceLevel: 'beginner' | 'intermediate' | 'advanced';
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+  preferredStyle: 'breathing-focused' | 'mindfulness' | 'body-scan' | 'loving-kindness';
+}
+
+interface MeditationStep {
+  time: number;
+  text: string;
+  type: 'intro' | 'instruction' | 'breathing' | 'encouragement' | 'guidance' | 'visualization' | 'mantra' | 'body_awareness' | 'transition' | 'awakening' | 'conclusion' | 'mindfulness' | 'release' | 'presence' | 'gratitude' | 'integration';
+}
+
 // Simulazione dei dati utente (da collegare al vero sistema)
-const mockUserProfile = {
+const mockUserProfile: UserProfile = {
   stressLevel: 'high',
   energyLevel: 'low', 
   experienceLevel: 'beginner',
@@ -32,9 +45,21 @@ const mockUserProfile = {
   preferredStyle: 'breathing-focused'
 };
 
-// Script di meditazione personalizzati
-const getMeditationScript = (profile: any, duration: number) => {
-  const scripts = {
+// Mock router per gestire navigazione
+const mockRouter = {
+  push: (url: string) => {
+    if (typeof window !== 'undefined') {
+      window.location.href = url;
+    }
+  }
+};
+
+// Mock params per demo
+const mockParams = { key: '5min-meditation' };
+
+// Script di meditazione personalizzati con tipizzazione corretta
+const getMeditationScript = (profile: UserProfile, duration: number): MeditationStep[] => {
+  const scripts: Record<string, MeditationStep[]> = {
     high_stress_beginner: [
       { time: 0, text: "Benvenuto. Trova una posizione comoda e chiudi gli occhi.", type: "intro" },
       { time: 10, text: "Porta l'attenzione al tuo respiro naturale, senza forzarlo.", type: "instruction" },
@@ -64,27 +89,47 @@ const getMeditationScript = (profile: any, duration: number) => {
       { time: 240, text: "Preparati dolcemente a tornare.", type: "transition" },
       { time: 270, text: "Porta questa calma con te.", type: "integration" },
       { time: 285, text: "Apri gli occhi quando ti senti pronto.", type: "conclusion" }
+    ],
+    medium_stress_intermediate: [
+      { time: 0, text: "Siediti comodamente e prendi un momento per arrivare qui.", type: "intro" },
+      { time: 20, text: "Osserva il tuo respiro senza giudicarlo.", type: "instruction" },
+      { time: 45, text: "Nota le sensazioni del corpo contro la sedia.", type: "body_awareness" },
+      { time: 75, text: "Se emergono pensieri, semplicemente notali.", type: "mindfulness" },
+      { time: 105, text: "Torna sempre al respiro come al tuo ancoraggio.", type: "guidance" },
+      { time: 135, text: "Inspira presenza, espira tensione.", type: "mantra" },
+      { time: 165, text: "Senti lo spazio di calma che stai creando.", type: "visualization" },
+      { time: 195, text: "Questo momento di pace ti appartiene.", type: "encouragement" },
+      { time: 225, text: "Gradualmente espandi la consapevolezza.", type: "transition" },
+      { time: 255, text: "Muovi lentamente le dita e i piedi.", type: "awakening" },
+      { time: 285, text: "Apri gli occhi portando questa presenza con te.", type: "conclusion" }
     ]
   };
 
-  const key = `${profile.stressLevel}_${profile.experienceLevel}` in scripts ? 
-    `${profile.stressLevel}_${profile.experienceLevel}` : 
-    `${profile.energyLevel}_${profile.timeOfDay}`;
-    
-  return scripts[key] || scripts.high_stress_beginner;
+  // Determina la chiave dello script in modo type-safe
+  const primaryKey = `${profile.stressLevel}_${profile.experienceLevel}`;
+  const secondaryKey = `${profile.energyLevel}_${profile.timeOfDay}`;
+  
+  if (scripts[primaryKey]) {
+    return scripts[primaryKey];
+  }
+  if (scripts[secondaryKey]) {
+    return scripts[secondaryKey];
+  }
+  
+  return scripts.high_stress_beginner;
 };
 
 function GuidedMeditationSystem() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration] = useState(300); // 5 minuti
-  const [currentInstruction, setCurrentInstruction] = useState(null);
-  const [meditationScript, setMeditationScript] = useState([]);
+  const [currentInstruction, setCurrentInstruction] = useState<MeditationStep | null>(null);
+  const [meditationScript, setMeditationScript] = useState<MeditationStep[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [phase, setPhase] = useState('setup'); // setup, active, completed
+  const [phase, setPhase] = useState<'setup' | 'active' | 'completed'>('setup');
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   
-  const intervalRef = useRef(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Genera script personalizzato basato sul profilo
@@ -93,7 +138,7 @@ function GuidedMeditationSystem() {
     setCurrentInstruction(script[0]);
 
     // Mouse tracking per effetti parallax
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       setMousePosition({ x: e.clientX, y: e.clientY });
     };
 
@@ -134,10 +179,16 @@ function GuidedMeditationSystem() {
         });
       }, 1000);
     } else {
-      clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     }
 
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
   }, [isPlaying, meditationScript, currentInstruction, audioEnabled, duration]);
 
   const togglePlay = () => {
@@ -156,7 +207,7 @@ function GuidedMeditationSystem() {
     setAudioEnabled(!audioEnabled);
   };
 
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -164,8 +215,8 @@ function GuidedMeditationSystem() {
 
   const getProgressPercentage = () => (currentTime / duration) * 100;
 
-  const getInstructionStyle = (type) => {
-    const styles = {
+  const getInstructionStyle = (type: MeditationStep['type']) => {
+    const styles: Record<MeditationStep['type'], string> = {
       intro: 'text-blue-300',
       instruction: 'text-white/90',
       breathing: 'text-green-300 font-medium',
@@ -373,7 +424,7 @@ function GuidedMeditationSystem() {
         <p className="text-sm text-white/60">
           {phase === 'setup' && 'Preparazione - Trova una posizione comoda'}
           {phase === 'active' && 'Meditazione in corso - Segui le istruzioni'}
-          {phase === 'completed' && 'Sessione completata - Ben fatto! 🎉'}
+          {phase === 'completed' && 'Sessione completata - Ben fatto!'}
         </p>
       </div>
 
@@ -697,9 +748,7 @@ function DeepBreathingGuide() {
 }
 
 export default function ModernSuggestionDetail() {
-  const params = useParams();
-  const key = String(params?.key ?? '');
-  const router = useRouter();
+  const key = String(mockParams?.key ?? '');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -772,13 +821,21 @@ export default function ModernSuggestionDetail() {
       // TODO: Qui collegare all'API per salvare il completamento
       // await fetch('/api/activity/complete', { ... })
       
-      setMsg('Attività completata! 🎉');
-      setTimeout(() => router.push('/suggestions'), 1500);
+      setMsg('Attività completata!');
+      setTimeout(() => mockRouter.push('/suggestions'), 1500);
     } catch (e: any) {
       setMsg('Errore durante il salvataggio');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleBackClick = () => {
+    mockRouter.push('/suggestions');
+  };
+
+  const handleHomeClick = () => {
+    mockRouter.push('/');
   };
 
   return (
@@ -793,16 +850,19 @@ export default function ModernSuggestionDetail() {
       <nav className="relative z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+            <button 
+              onClick={handleHomeClick}
+              className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent"
+            >
               LifeOS
-            </Link>
-            <Link 
-              href="/suggestions"
+            </button>
+            <button 
+              onClick={handleBackClick}
               className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Torna ai consigli
-            </Link>
+            </button>
           </div>
         </div>
       </nav>
