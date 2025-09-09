@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Brain, Heart, Moon, TrendingUp, Zap, Star, Users, Shield } from 'lucide-react';
+import { Brain, Heart, Moon, TrendingUp, Zap, Star, Users, Shield, Play, CheckCircle, ArrowRight, BarChart3, Clock, Target } from 'lucide-react';
 import Link from 'next/link';
 
 // SSR-safe scroll position hook
@@ -49,98 +49,130 @@ const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 
 };
 
 // Smooth scroll utility
-const scrollToFeatures = () => {
-  const featuresSection = document.getElementById('features-section');
-  if (featuresSection) {
-    featuresSection.scrollIntoView({ 
+const scrollToSection = (sectionId: string) => {
+  const section = document.getElementById(sectionId);
+  if (section) {
+    section.scrollIntoView({ 
       behavior: 'smooth',
       block: 'start'
     });
   }
 };
 
-const LifeScorePreview: React.FC = () => {
-  const [score, setScore] = useState(87);
-  const [hovering, setHovering] = useState(false);
+// Interactive Demo Component
+const DashboardPreview: React.FC = () => {
+  const [currentMetric, setCurrentMetric] = useState(0);
   const [mounted, setMounted] = useState(false);
-  const circleRef = useRef<HTMLDivElement>(null);
-  const isVisible = useIntersectionObserver(circleRef);
+  const demoRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(demoRef);
+
+  const metrics = [
+    { label: 'LifeScore', value: 87, color: 'from-blue-400 to-purple-500' },
+    { label: 'Energia', value: 78, color: 'from-orange-400 to-red-500' },
+    { label: 'Sonno', value: 92, color: 'from-indigo-400 to-purple-500' },
+    { label: 'Stress', value: 34, color: 'from-green-400 to-blue-500' }
+  ];
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!isVisible) return;
+
+    const interval = setInterval(() => {
+      setCurrentMetric((prev) => (prev + 1) % metrics.length);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isVisible, metrics.length]);
 
   if (!mounted) {
-    return (
-      <div className="w-64 h-64 mx-auto bg-white/10 rounded-full animate-pulse" />
-    );
+    return <div className="w-80 h-60 bg-white/10 rounded-2xl animate-pulse" />;
   }
 
-  const circumference = 2 * Math.PI * 60;
-  const strokeDasharray = circumference;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
+  const current = metrics[currentMetric];
 
   return (
     <div 
-      ref={circleRef}
-      className={`relative w-64 h-64 mx-auto transition-all duration-1000 ${
-        isVisible ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
+      ref={demoRef}
+      className={`relative w-80 h-60 mx-auto transition-all duration-1000 ${
+        isVisible ? 'scale-100 opacity-100' : 'scale-75 opacity-0'
       }`}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
     >
-      {/* Background glow */}
-      <div className={`absolute inset-0 rounded-full transition-all duration-700 ${
-        hovering ? 'shadow-[0_0_100px_rgba(147,197,253,0.4)]' : 'shadow-[0_0_50px_rgba(147,197,253,0.2)]'
-      }`} />
-      
-      {/* SVG Circle */}
-      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 128 128">
-        {/* Background circle */}
-        <circle
-          cx="64"
-          cy="64"
-          r="60"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="8"
-          fill="none"
-        />
-        
-        {/* Progress circle */}
-        <circle
-          cx="64"
-          cy="64"
-          r="60"
-          stroke="url(#gradient)"
-          strokeWidth="8"
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={strokeDasharray}
-          strokeDashoffset={isVisible ? strokeDashoffset : circumference}
-          className="transition-all duration-2000 ease-out"
-        />
-        
-        {/* Gradient definition */}
-        <defs>
-          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3B82F6" />
-            <stop offset="50%" stopColor="#8B5CF6" />
-            <stop offset="100%" stopColor="#06B6D4" />
-          </linearGradient>
-        </defs>
-      </svg>
-      
-      {/* Center content */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="text-center">
-          <div className={`text-5xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent transition-all duration-500 ${
-            hovering ? 'scale-110' : 'scale-100'
-          }`}>
-            {score}
+      <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-white font-semibold">Dashboard Live</h4>
+          <div className="flex space-x-1">
+            {metrics.map((_, i) => (
+              <div 
+                key={i}
+                className={`w-2 h-2 rounded-full transition-all ${
+                  i === currentMetric ? 'bg-blue-400' : 'bg-white/30'
+                }`}
+              />
+            ))}
           </div>
-          <div className="text-sm text-white/70 mt-1">LifeScore</div>
+        </div>
+        
+        <div className="text-center">
+          <div className={`text-4xl font-bold bg-gradient-to-r ${current.color} bg-clip-text text-transparent mb-2`}>
+            {current.value}
+          </div>
+          <div className="text-white/70 mb-4">{current.label}</div>
+          
+          {/* Mini chart simulation */}
+          <div className="flex items-end justify-between h-12 mb-4">
+            {[...Array(7)].map((_, i) => (
+              <div 
+                key={i}
+                className={`w-6 bg-gradient-to-t ${current.color} rounded-t opacity-70`}
+                style={{ 
+                  height: `${20 + Math.random() * 28}px`,
+                  animationDelay: `${i * 100}ms`
+                }}
+              />
+            ))}
+          </div>
+          
+          <div className="text-xs text-white/50">Ultimi 7 giorni</div>
         </div>
       </div>
+    </div>
+  );
+};
+
+const StatCounter: React.FC<{ target: number; label: string; delay: number }> = ({ target, label, delay }) => {
+  const [count, setCount] = useState(0);
+  const [started, setStarted] = useState(false);
+  const counterRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(counterRef);
+
+  useEffect(() => {
+    if (!isVisible || started) return;
+
+    setTimeout(() => {
+      setStarted(true);
+      const duration = 2000;
+      const steps = 60;
+      const increment = target / steps;
+      let current = 0;
+
+      const timer = setInterval(() => {
+        current += increment;
+        if (current >= target) {
+          setCount(target);
+          clearInterval(timer);
+        } else {
+          setCount(Math.floor(current));
+        }
+      }, duration / steps);
+
+      return () => clearInterval(timer);
+    }, delay);
+  }, [isVisible, target, started, delay]);
+
+  return (
+    <div ref={counterRef} className="text-center">
+      <div className="text-4xl font-bold text-white mb-2">{count}+</div>
+      <div className="text-white/70">{label}</div>
     </div>
   );
 };
@@ -149,8 +181,9 @@ const FeatureCard: React.FC<{
   icon: React.ReactNode;
   title: string;
   description: string;
+  features: string[];
   delay: number;
-}> = ({ icon, title, description, delay }) => {
+}> = ({ icon, title, description, features, delay }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const isVisible = useIntersectionObserver(cardRef);
 
@@ -166,17 +199,73 @@ const FeatureCard: React.FC<{
         transitionDelay: isVisible ? `${delay}ms` : '0ms'
       }}
     >
-      {/* Floating icon */}
       <div className="relative z-10 flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl mb-6 group-hover:rotate-12 transition-transform duration-300">
         {icon}
       </div>
       
-      {/* Background gradient on hover */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       
       <div className="relative z-10">
         <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
-        <p className="text-white/70 leading-relaxed">{description}</p>
+        <p className="text-white/70 leading-relaxed mb-6">{description}</p>
+        
+        <ul className="space-y-2">
+          {features.map((feature, i) => (
+            <li key={i} className="flex items-center gap-3 text-white/80 text-sm">
+              <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+const TestimonialCard: React.FC<{
+  quote: string;
+  author: string;
+  role: string;
+  metrics: string;
+  delay: number;
+}> = ({ quote, author, role, metrics, delay }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(cardRef);
+
+  return (
+    <div
+      ref={cardRef}
+      className={`bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 transition-all duration-700 ${
+        isVisible 
+          ? 'translate-y-0 opacity-100' 
+          : 'translate-y-20 opacity-0'
+      }`}
+      style={{ 
+        transitionDelay: isVisible ? `${delay}ms` : '0ms'
+      }}
+    >
+      <div className="flex mb-4">
+        {[...Array(5)].map((_, i) => (
+          <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
+        ))}
+      </div>
+      
+      <blockquote className="text-white/90 mb-6 italic leading-relaxed">
+        "{quote}"
+      </blockquote>
+      
+      <div className="flex items-center gap-4 mb-4">
+        <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+          {author.charAt(0)}
+        </div>
+        <div>
+          <div className="text-white font-semibold">{author}</div>
+          <div className="text-white/60 text-sm">{role}</div>
+        </div>
+      </div>
+      
+      <div className="text-green-400 text-sm font-medium bg-green-500/20 px-3 py-1 rounded-full inline-block">
+        {metrics}
       </div>
     </div>
   );
@@ -263,9 +352,9 @@ const HomePage: React.FC = () => {
               <Link href="/" className="hover:text-white transition-colors">Home</Link>
               <Link href="/suggestions" className="hover:text-white transition-colors">Suggestions</Link>
               <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-              <Link href="/profile" className="hover:text-white transition-colors">Profilo</Link>
+              <Link href="/settings" className="hover:text-white transition-colors">Settings</Link>
             </div>
-            <Link href="/checkin" className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+            <Link href="/sign-in" className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
               Inizia Gratis
             </Link>
           </div>
@@ -279,40 +368,54 @@ const HomePage: React.FC = () => {
         style={{ transform: heroTransform }}
       >
         <div 
-          className="relative z-10 max-w-4xl mx-auto px-6"
+          className="relative z-10 max-w-6xl mx-auto px-6"
           style={{
             transform: `translate(${mouseParallaxX}px, ${mouseParallaxY}px)`
           }}
         >
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-8 leading-tight">
-            Trasforma la tua vita con
+          {/* Enhanced Typography */}
+          <h1 className="text-5xl md:text-8xl font-black text-white mb-8 leading-[0.9] tracking-tight">
+            <span className="block font-light text-4xl md:text-5xl text-white/80 mb-4">Il futuro del</span>
             <span className="block bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent">
-              l'AI del benessere
+              BENESSERE
             </span>
+            <span className="block font-light text-3xl md:text-5xl text-white/80 mt-4">è qui</span>
           </h1>
           
-          <p className="text-xl md:text-2xl text-white/80 mb-12 max-w-3xl mx-auto leading-relaxed">
-            Il coach virtuale che ti aiuta ogni giorno a migliorare sonno, energia e benessere 
-            attraverso consigli personalizzati e tutorial guidati.
+          <p className="text-xl md:text-2xl text-white/80 mb-12 max-w-4xl mx-auto leading-relaxed font-light">
+            L'AI coach che trasforma i tuoi dati biometrici in azioni concrete per migliorare 
+            <span className="text-white font-medium"> sonno, energia e focus</span> ogni singolo giorno.
           </p>
+
+          {/* Statistics */}
+          <div className="grid grid-cols-3 gap-8 mb-16 max-w-2xl mx-auto">
+            <StatCounter target={87} label="LifeScore Medio" delay={0} />
+            <StatCounter target={2400} label="Utenti Attivi" delay={200} />
+            <StatCounter target={94} label="% Miglioramento" delay={400} />
+          </div>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-            <button 
-              onClick={scrollToFeatures}
-              className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl cursor-pointer"
+            <Link 
+              href="/dashboard"
+              className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-10 py-5 rounded-full font-bold text-xl hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl flex items-center gap-3"
             >
-              <span className="relative z-10">Scopri Come Funziona</span>
+              <Play className="w-6 h-6" />
+              <span className="relative z-10">Guarda Demo Live</span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            </button>
-            
-            <Link href="/dashboard" className="border-2 border-white/30 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-lg">
-              Guarda Demo
             </Link>
+            
+            <button 
+              onClick={() => scrollToSection('features-section')}
+              className="border-2 border-white/30 text-white px-10 py-5 rounded-full font-bold text-xl hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-lg flex items-center gap-3"
+            >
+              Scopri Come
+              <ArrowRight className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* LifeScore Preview */}
-          <LifeScorePreview />
+          {/* Interactive Demo */}
+          <DashboardPreview />
         </div>
 
         {/* Scroll Indicator */}
@@ -323,124 +426,196 @@ const HomePage: React.FC = () => {
 
       {/* Features Section */}
       <section id="features-section" className="relative py-32 px-6">
-        <div className="container mx-auto max-w-6xl">
+        <div className="container mx-auto max-w-7xl">
           <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Come funziona LifeOS
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6">
+              Come <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">funziona</span>
             </h2>
             <p className="text-xl text-white/70 max-w-3xl mx-auto">
-              Quattro funzionalità che trasformano i tuoi dati in azioni concrete per il benessere
+              Quattro pilastri che trasformano i tuoi dati in miglioramenti concreti e misurabili
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <FeatureCard
-              icon={<Brain className="w-8 h-8 text-white" />}
-              title="LifeScore Intelligente"
-              description="Un algoritmo avanzato analizza sonno, attività fisica e stato mentale per darti un punteggio giornaliero da 0 a 100."
+              icon={<BarChart3 className="w-8 h-8 text-white" />}
+              title="LifeScore Avanzato"
+              description="Algoritmo proprietario che analizza 50+ parametri biometrici per un punteggio di benessere da 0 a 100."
+              features={[
+                "Analisi sonno REM/non-REM",
+                "Variabilità cardiaca HRV", 
+                "Pattern di attività fisica",
+                "Stress levels real-time"
+              ]}
               delay={0}
             />
             
             <FeatureCard
-              icon={<Zap className="w-8 h-8 text-white" />}
-              title="Consigli Personalizzati"
-              description="Suggerimenti specifici basati sui tuoi dati reali: respirazione, micro-pause, esercizi mirati per la tua situazione."
+              icon={<Brain className="w-8 h-8 text-white" />}
+              title="AI Personalizzata"
+              description="Consigli specifici basati sui tuoi pattern unici, non su statistiche generiche."
+              features={[
+                "Machine learning adattivo",
+                "Timing ottimale per azioni",
+                "Progressione personalizzata",
+                "Feedback in tempo reale"
+              ]}
               delay={200}
             />
             
             <FeatureCard
-              icon={<Heart className="w-8 h-8 text-white" />}
-              title="Tutorial Guidati"
-              description="Non sai come fare respirazione 4-7-8 o meditazione? Ti guidiamo passo passo con animazioni interattive e timer."
+              icon={<Target className="w-8 h-8 text-white" />}
+              title="Tutorial Interattivi"
+              description="Sessioni guidate step-by-step per respirazione, meditazione, power nap e micro-pause."
+              features={[
+                "Respirazione 4-7-8 guidata",
+                "Power nap con audio 3D",
+                "Meditazione progressiva",
+                "Stretching desk-friendly"
+              ]}
               delay={400}
             />
             
             <FeatureCard
               icon={<TrendingUp className="w-8 h-8 text-white" />}
-              title="Analytics Avanzate"
-              description="Visualizza i tuoi progressi nel tempo con grafici dettagliati e insights personalizzati per ottimizzare i risultati."
+              title="Analytics Predittive"
+              description="Non solo tracking, ma previsioni sui tuoi pattern di benessere per ottimizzare i risultati."
+              features={[
+                "Trend predittivi 7-30 giorni",
+                "Alert preventivi burnout",
+                "Insights correlazioni",
+                "ROI del benessere"
+              ]}
               delay={600}
             />
           </div>
         </div>
       </section>
 
-      {/* Social Proof Section */}
-      <section className="relative py-24 px-6">
-        <div className="container mx-auto max-w-4xl text-center">
-          <div className="bg-white/5 backdrop-blur-lg rounded-3xl p-12 border border-white/10">
-            <div className="flex justify-center mb-8">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-8 h-8 text-yellow-400 fill-current" />
-              ))}
-            </div>
+      {/* Testimonials Section */}
+      <section className="relative py-32 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              Risultati <span className="bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">reali</span>
+            </h2>
+            <p className="text-xl text-white/70">
+              Persone vere, miglioramenti misurabili, trasformazioni durature
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <TestimonialCard
+              quote="In 3 settimane il mio LifeScore è passato da 64 a 89. Dormo meglio, ho più energia e la produttività è aumentata del 40%."
+              author="Marco Rossi"
+              role="Product Manager"
+              metrics="+39% miglioramento sonno"
+              delay={0}
+            />
             
-            <blockquote className="text-2xl md:text-3xl text-white font-light italic mb-8 leading-relaxed">
-              "In sole 2 settimane il mio sonno è migliorato del 40% e mi sento molto più energico durante il giorno"
-            </blockquote>
+            <TestimonialCard
+              quote="L'AI ha capito che il mio picco di energia è alle 14:30. Ora programmo i task più impegnativi in quel momento. Game changer!"
+              author="Sofia Chen"
+              role="UX Designer"
+              metrics="+52% focus pomeridiano"
+              delay={200}
+            />
             
-            <div className="flex items-center justify-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full" />
-              <div className="text-left">
-                <div className="text-white font-semibold">Marco R.</div>
-                <div className="text-white/60 text-sm">Utilizzatore Beta</div>
-              </div>
-            </div>
+            <TestimonialCard
+              quote="I power nap guidati di 15 minuti hanno sostituito il caffè del pomeriggio. Mi sento più lucido e dormo meglio la notte."
+              author="Alessandro Bianchi"
+              role="Startup Founder"
+              metrics="+73% qualità sonno"
+              delay={400}
+            />
           </div>
         </div>
       </section>
 
       {/* Final CTA Section */}
-      <section className="relative py-24 px-6">
+      <section className="relative py-32 px-6">
         <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-8">
-            Inizia il tuo percorso di benessere
+          <h2 className="text-4xl md:text-6xl font-bold text-white mb-8">
+            Inizia la tua
+            <span className="block bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              trasformazione
+            </span>
           </h2>
           
           <p className="text-xl text-white/70 mb-12 max-w-2xl mx-auto">
-            Unisciti a migliaia di persone che hanno già migliorato la loro qualità di vita con LifeOS
+            Unisciti a 2.400+ persone che hanno già migliorato la loro qualità di vita con LifeOS. 
+            Risultati misurabili in 14 giorni o rimborso garantito.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link href="/checkin" className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-12 py-4 rounded-full font-bold text-xl hover:scale-105 transition-all duration-300 shadow-2xl">
+          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12">
+            <Link href="/sign-in" className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-12 py-5 rounded-full font-bold text-xl hover:scale-105 transition-all duration-300 shadow-2xl">
               <span className="relative z-10 flex items-center gap-3">
-                Inizia Gratis Ora
+                Inizia Gratis per 30 giorni
                 <Zap className="w-6 h-6" />
               </span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </Link>
           </div>
 
-          <div className="mt-8 flex items-center justify-center gap-8 text-white/60 text-sm">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4" />
-              Gratis per sempre
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-white/60 text-sm">
+            <div className="flex items-center justify-center gap-2">
+              <Shield className="w-5 h-5 text-green-400" />
+              <span>30 giorni gratis</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              2000+ utenti attivi
+            <div className="flex items-center justify-center gap-2">
+              <Users className="w-5 h-5 text-blue-400" />
+              <span>2.400+ utenti attivi</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <CheckCircle className="w-5 h-5 text-purple-400" />
+              <span>Risultati garantiti</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="relative bg-black/20 backdrop-blur-lg border-t border-white/10 py-12 px-6">
+      <footer className="relative bg-black/30 backdrop-blur-lg border-t border-white/10 py-16 px-6">
         <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-4 md:mb-0">
-              LifeOS
-            </Link>
+          <div className="grid md:grid-cols-4 gap-8 mb-12">
+            <div className="col-span-2">
+              <Link href="/" className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-4 block">
+                LifeOS
+              </Link>
+              <p className="text-white/60 max-w-md mb-6">
+                La piattaforma AI che trasforma i tuoi dati biometrici in azioni concrete per il benessere. 
+                Risultati misurabili, miglioramenti duraturi.
+              </p>
+            </div>
             
-            <div className="flex gap-8 text-white/60 text-sm">
-              <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy</Link>
-              <Link href="/legal/terms" className="hover:text-white transition-colors">Termini</Link>
-              <a href="mailto:support@lifeos.app" className="hover:text-white transition-colors">Contatti</a>
+            <div>
+              <h4 className="text-white font-semibold mb-4">Prodotto</h4>
+              <div className="space-y-2 text-white/60">
+                <Link href="/dashboard" className="block hover:text-white transition-colors">Dashboard</Link>
+                <Link href="/suggestions" className="block hover:text-white transition-colors">AI Coaching</Link>
+                <Link href="/settings" className="block hover:text-white transition-colors">Personalizzazione</Link>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Supporto</h4>
+              <div className="space-y-2 text-white/60">
+                <Link href="/help" className="block hover:text-white transition-colors">Centro Aiuto</Link>
+                <a href="mailto:support@lifeos.app" className="block hover:text-white transition-colors">Contattaci</a>
+                <Link href="/legal/privacy" className="block hover:text-white transition-colors">Privacy</Link>
+              </div>
             </div>
           </div>
           
-          <div className="mt-8 text-center text-white/40 text-sm">
-            © 2024 LifeOS. Trasforma la tua vita, un giorno alla volta.
+          <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-white/10">
+            <div className="text-white/40 text-sm mb-4 md:mb-0">
+              © 2024 LifeOS. Trasforma la tua vita, un giorno alla volta.
+            </div>
+            
+            <div className="flex items-center gap-4 text-white/60">
+              <Clock className="w-4 h-4" />
+              <span className="text-sm">Tempo medio setup: 3 minuti</span>
+            </div>
           </div>
         </div>
       </footer>
