@@ -15,12 +15,12 @@ export const PowerNapGuide: React.FC = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const howlRef = useRef<Howl | null>(null);
 
-  // Audio URLs - utilizzare CDN pubblici o hosting proprio
+  // Audio URLs - file reali caricati in /public/audio/
   const audioSources = {
-    rain: 'https://www.soundjay.com/misc/sounds/rain-01.mp3', // Esempio - sostituire con URL reali
-    ocean: 'https://www.soundjay.com/misc/sounds/ocean-waves.mp3', // Esempio - sostituire con URL reali  
-    forest: 'https://www.soundjay.com/misc/sounds/forest-ambience.mp3', // Esempio - sostituire con URL reali
-    chimes: 'https://www.soundjay.com/misc/sounds/chimes.mp3' // Esempio - sostituire con URL reali
+    rain: '/audio/rain.mp3',
+    ocean: '/audio/ocean.mp3',
+    forest: '/audio/forest.mp3',
+    chimes: '/audio/chimes.mp3'
   };
 
   useEffect(() => {
