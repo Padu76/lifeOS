@@ -4,6 +4,9 @@ import { GuidedMeditationSystem } from '../components/GuidedMeditationSystem';
 import { VirtualWalkingCoach } from '../components/VirtualWalkingCoach';
 import { HydrationGuide } from '../components/HydrationGuide';
 import { ModernBreathing478 } from '../components/ModernBreathing478';
+import { PowerNapGuide } from '../components/PowerNapGuide';
+import { StretchingSequence } from '../components/StretchingSequence';
+import { EnergyBoostSession } from '../components/EnergyBoostSession';
 
 // Configurazioni delle suggestions
 export const suggestions = {
@@ -71,35 +74,20 @@ export const suggestions = {
     description: 'Breve riposo rigenerante',
     icon: Moon,
     gradient: 'from-indigo-400 to-purple-600',
-    component: () => (
-      <div className="text-center space-y-6">
-        <div className="text-6xl mb-4">😴</div>
-        <p className="text-lg text-white/80">15 minuti di riposo per ricaricarti</p>
-      </div>
-    )
+    component: PowerNapGuide
   },
   'stretch': {
     title: 'Stretching',
     description: 'Allunga i muscoli e rilassa il corpo',
     icon: Activity,
     gradient: 'from-green-400 to-blue-600',
-    component: () => (
-      <div className="text-center space-y-6">
-        <div className="text-6xl mb-4">🤸‍♂️</div>
-        <p className="text-lg text-white/80">Allunga e rilassa i muscoli</p>
-      </div>
-    )
+    component: StretchingSequence
   },
   'energy-boost': {
     title: 'Ricarica di energia',
     description: 'Attività per aumentare vitalità',
     icon: Zap,
     gradient: 'from-yellow-400 to-orange-600',
-    component: () => (
-      <div className="text-center space-y-6">
-        <div className="text-6xl mb-4">⚡</div>
-        <p className="text-lg text-white/80">Risveglia la tua energia vitale</p>
-      </div>
-    )
+    component: EnergyBoostSession
   }
 };
