@@ -1,0 +1,295 @@
+/* apps/web/styles/performance.css */
+
+/* GPU-accelerated animations - use transform and opacity only */
+.gpu-optimized {
+  will-change: transform, opacity;
+  transform: translateZ(0); /* Force GPU layer */
+  backface-visibility: hidden;
+}
+
+/* Smooth animations with proper easing */
+.smooth-transition {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reduce animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Optimized hover effects */
+.hover-optimized {
+  transition: transform 0.2s ease-out;
+}
+
+.hover-optimized:hover {
+  transform: scale(1.05) translateZ(0);
+}
+
+/* Loading animations - lightweight */
+.loading-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.loading-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Optimized fade animations */
+.fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) translateZ(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+  }
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-out forwards;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) translateZ(0);
+  }
+}
+
+/* Slide animations - GPU optimized */
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%) translateZ(0);
+  }
+  to {
+    transform: translateX(0) translateZ(0);
+  }
+}
+
+.slide-out-right {
+  animation: slideOutRight 0.3s ease-out forwards;
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0) translateZ(0);
+  }
+  to {
+    transform: translateX(100%) translateZ(0);
+  }
+}
+
+/* Scale animations */
+.scale-in {
+  animation: scaleIn 0.2s ease-out forwards;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95) translateZ(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateZ(0);
+    opacity: 1;
+  }
+}
+
+/* Optimized backdrop blur */
+.backdrop-blur-optimized {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  /* Fallback for older browsers */
+  background-color: rgba(15, 23, 42, 0.8);
+}
+
+/* Virtual scrolling container */
+.virtual-scroll-container {
+  height: 100%;
+  overflow: auto;
+  contain: layout style paint;
+}
+
+.virtual-scroll-item {
+  contain: layout style paint;
+  will-change: transform;
+}
+
+/* Memory optimization classes */
+.contain-layout {
+  contain: layout;
+}
+
+.contain-paint {
+  contain: paint;
+}
+
+.contain-strict {
+  contain: strict;
+}
+
+/* Intersection observer optimization */
+.lazy-load-trigger {
+  height: 1px;
+  width: 100%;
+  position: absolute;
+  bottom: 200px; /* Trigger 200px before element is visible */
+}
+
+/* Performance-optimized gradients */
+.gradient-optimized {
+  background-image: linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #312e81 50%, #1e1b4b 75%, #0f172a 100%);
+  background-attachment: fixed;
+  background-size: 400% 400%;
+}
+
+.gradient-animated {
+  animation: gradientShift 8s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Text rendering optimization */
+.optimized-text {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Button press feedback - optimized */
+.button-press {
+  transition: transform 0.1s ease-out;
+}
+
+.button-press:active {
+  transform: scale(0.98) translateZ(0);
+}
+
+/* Modal animations - lightweight */
+.modal-backdrop {
+  animation: modalBackdropFadeIn 0.2s ease-out forwards;
+}
+
+@keyframes modalBackdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  animation: modalContentSlideIn 0.3s ease-out forwards;
+}
+
+@keyframes modalContentSlideIn {
+  from {
+    transform: scale(0.95) translateY(20px) translateZ(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0) translateZ(0);
+    opacity: 1;
+  }
+}
+
+/* Card hover effects - performant */
+.card-hover {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px) translateZ(0);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Loading skeleton - efficient */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 75%);
+  background-size: 200% 100%;
+  animation: skeletonLoading 1.5s infinite;
+}
+
+@keyframes skeletonLoading {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Scroll performance optimization */
+.scroll-optimized {
+  scroll-behavior: smooth;
+  overflow-anchor: none;
+  contain: layout style paint;
+}
+
+/* High frequency animation optimization */
+.high-frequency-animation {
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Critical rendering path optimization */
+.above-fold {
+  contain: layout style;
+}
+
+.below-fold {
+  contain: layout style paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 200px;
+}
