@@ -40,14 +40,7 @@ export const PowerNapGuide: React.FC = () => {
       testHowlRef.current = null;
     }
     
-    // Ferma tutte le istanze Howl globali
-    if (typeof Howl !== 'undefined') {
-      try {
-        Howl.stop();
-      } catch (e) {
-        // Ignore error se non ci sono audio attivi
-      }
-    }
+    // Le istanze specifiche sono già gestite dai ref sopra
   };
 
   useEffect(() => {
