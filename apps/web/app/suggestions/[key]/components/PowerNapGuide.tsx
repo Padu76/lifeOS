@@ -2,10 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Moon, Clock, CheckCircle } from 'lucide-react';
-
-interface AudioSource {
-  stop: () => void;
-}
+import { Howl } from 'howler';
 
 export const PowerNapGuide: React.FC = () => {
   const [phase, setPhase] = useState<'preparation' | 'timer' | 'wakeup' | 'completed'>('preparation');
@@ -16,7 +13,15 @@ export const PowerNapGuide: React.FC = () => {
   const [customTime, setCustomTime] = useState(15);
   const [volume, setVolume] = useState(0.3);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioSourceRef = useRef<AudioSource | null>(null);
+  const howlRef = useRef<Howl | null>(null);
+
+  // Audio URLs - utilizzare CDN pubblici o hosting proprio
+  const audioSources = {
+    rain: 'https://www.soundjay.com/misc/sounds/rain-01.mp3', // Esempio - sostituire con URL reali
+    ocean: 'https://www.soundjay.com/misc/sounds/ocean-waves.mp3', // Esempio - sostituire con URL reali  
+    forest: 'https://www.soundjay.com/misc/sounds/forest-ambience.mp3', // Esempio - sostituire con URL reali
+    chimes: 'https://www.soundjay.com/misc/sounds/chimes.mp3' // Esempio - sostituire con URL reali
+  };
 
   useEffect(() => {
     if (isActive && timeLeft > 0) {
@@ -52,168 +57,50 @@ export const PowerNapGuide: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const createRelaxingAmbientSound = (type: string) => {
-    if (!soundEnabled || type === 'silence') return;
-
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-
-      let oscillator1: OscillatorNode;
-      let oscillator2: OscillatorNode;
-      let gainNode: GainNode;
-      let filter: BiquadFilterNode;
-
-      switch (type) {
-        case 'rain':
-          // Gentle pink noise for rain
-          const bufferSize = 4096;
-          const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-          const output = buffer.getChannelData(0);
-          
-          let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-          for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            b0 = 0.99886 * b0 + white * 0.0555179;
-            b1 = 0.99332 * b1 + white * 0.0750759;
-            b2 = 0.96900 * b2 + white * 0.1538520;
-            b3 = 0.86650 * b3 + white * 0.3104856;
-            b4 = 0.55000 * b4 + white * 0.5329522;
-            b5 = -0.7616 * b5 - white * 0.0168980;
-            output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-            b6 = white * 0.115926;
-          }
-          
-          const whiteNoise = audioContext.createBufferSource();
-          whiteNoise.buffer = buffer;
-          whiteNoise.loop = true;
-          
-          gainNode = audioContext.createGain();
-          gainNode.gain.setValueAtTime(volume * 0.15, audioContext.currentTime);
-          
-          filter = audioContext.createBiquadFilter();
-          filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(800, audioContext.currentTime);
-          
-          whiteNoise.connect(filter);
-          filter.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-          whiteNoise.start();
-          
-          audioSourceRef.current = {
-            stop: () => {
-              try {
-                whiteNoise.stop();
-              } catch (e) {
-                // Already stopped
-              }
-            }
-          };
-          break;
-
-        case 'ocean':
-          // Low frequency waves with gentle oscillation
-          oscillator1 = audioContext.createOscillator();
-          oscillator2 = audioContext.createOscillator();
-          gainNode = audioContext.createGain();
-          
-          oscillator1.type = 'sine';
-          oscillator1.frequency.setValueAtTime(60, audioContext.currentTime);
-          
-          oscillator2.type = 'sine';
-          oscillator2.frequency.setValueAtTime(0.2, audioContext.currentTime);
-          
-          const gainNode2 = audioContext.createGain();
-          gainNode2.gain.setValueAtTime(30, audioContext.currentTime);
-          
-          oscillator2.connect(gainNode2);
-          gainNode2.connect(oscillator1.frequency);
-          
-          gainNode.gain.setValueAtTime(volume * 0.1, audioContext.currentTime);
-          
-          oscillator1.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-          
-          oscillator1.start();
-          oscillator2.start();
-          
-          audioSourceRef.current = {
-            stop: () => {
-              try {
-                oscillator1.stop();
-                oscillator2.stop();
-              } catch (e) {
-                // Already stopped
-              }
-            }
-          };
-          break;
-
-        case 'forest':
-          // Multiple gentle tones for forest ambience
-          const frequencies = [220, 330, 440, 550];
-          const oscillators: OscillatorNode[] = [];
-          const gains: GainNode[] = [];
-          
-          frequencies.forEach((freq, index) => {
-            const osc = audioContext.createOscillator();
-            const gain = audioContext.createGain();
-            
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(freq + Math.random() * 20 - 10, audioContext.currentTime);
-            
-            gain.gain.setValueAtTime(volume * 0.02 * (1 - index * 0.2), audioContext.currentTime);
-            
-            gain.gain.setTargetAtTime(volume * 0.01 * (1 - index * 0.2), audioContext.currentTime + Math.random() * 5, 2);
-            
-            osc.connect(gain);
-            gain.connect(audioContext.destination);
-            osc.start();
-            
-            oscillators.push(osc);
-            gains.push(gain);
-          });
-          
-          audioSourceRef.current = {
-            stop: () => {
-              try {
-                oscillators.forEach(osc => osc.stop());
-              } catch (e) {
-                // Already stopped
-              }
-            }
-          };
-          break;
-      }
-    } catch (error) {
-      console.warn('Audio not supported:', error);
-    }
-  };
-
   const playAmbientSound = () => {
     if (!soundEnabled || ambientSound === 'silence') return;
     
     try {
       stopAmbientSound();
-      setTimeout(() => {
-        createRelaxingAmbientSound(ambientSound);
-      }, 100);
+      
+      const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
+      if (!audioUrl) return;
+
+      howlRef.current = new Howl({
+        src: [audioUrl],
+        loop: true,
+        volume: volume,
+        html5: true,
+        onloaderror: (id, error) => {
+          console.warn('Audio loading error:', error);
+          // Fallback a suono sintetico semplice se necessario
+          createFallbackSound(ambientSound);
+        },
+        onplayerror: (id, error) => {
+          console.warn('Audio play error:', error);
+          createFallbackSound(ambientSound);
+        }
+      });
+
+      howlRef.current.play();
     } catch (error) {
-      console.warn('Audio not supported:', error);
+      console.warn('Howler not supported:', error);
+      createFallbackSound(ambientSound);
     }
   };
 
   const stopAmbientSound = () => {
-    try {
-      if (audioSourceRef.current) {
-        audioSourceRef.current.stop();
-        audioSourceRef.current = null;
-      }
-    } catch (error) {
-      console.warn('Error stopping audio:', error);
+    if (howlRef.current) {
+      howlRef.current.stop();
+      howlRef.current.unload();
+      howlRef.current = null;
+    }
+  };
+
+  const updateVolume = (newVolume: number) => {
+    setVolume(newVolume);
+    if (howlRef.current) {
+      howlRef.current.volume(newVolume);
     }
   };
 
@@ -221,8 +108,96 @@ export const PowerNapGuide: React.FC = () => {
     if (!soundEnabled) return;
     
     try {
+      const chimes = new Howl({
+        src: [audioSources.chimes],
+        volume: volume * 0.8,
+        html5: true,
+        onloaderror: () => {
+          // Fallback a chimes sintetici se il file non carica
+          createSyntheticChimes();
+        }
+      });
+      
+      chimes.play();
+    } catch (error) {
+      console.warn('Chimes not supported:', error);
+      createSyntheticChimes();
+    }
+  };
+
+  // Fallback per quando Howler.js non funziona o file audio non disponibili
+  const createFallbackSound = (type: string) => {
+    if (!soundEnabled) return;
+    
+    try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      switch (type) {
+        case 'rain':
+          // Pink noise semplice per pioggia
+          const bufferSize = 4096;
+          const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+          const output = buffer.getChannelData(0);
+          
+          for (let i = 0; i < bufferSize; i++) {
+            output[i] = (Math.random() * 2 - 1) * 0.1;
+          }
+          
+          const noise = audioContext.createBufferSource();
+          noise.buffer = buffer;
+          noise.loop = true;
+          
+          const gainNode = audioContext.createGain();
+          gainNode.gain.setValueAtTime(volume * 0.2, audioContext.currentTime);
+          
+          noise.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          noise.start();
+          break;
+
+        case 'ocean':
+          // Onda sinusoidale lenta per oceano
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(60, audioContext.currentTime);
+          gain.gain.setValueAtTime(volume * 0.1, audioContext.currentTime);
+          
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          oscillator.start();
+          break;
+
+        case 'forest':
+          // Toni multipli dolci per foresta
+          const frequencies = [220, 330, 440];
+          frequencies.forEach((freq, index) => {
+            const osc = audioContext.createOscillator();
+            const oscGain = audioContext.createGain();
+            
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, audioContext.currentTime);
+            oscGain.gain.setValueAtTime(volume * 0.05, audioContext.currentTime);
+            
+            osc.connect(oscGain);
+            oscGain.connect(audioContext.destination);
+            osc.start();
+          });
+          break;
+      }
+    } catch (error) {
+      console.warn('Fallback audio not supported:', error);
+    }
+  };
+
+  const createSyntheticChimes = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const frequencies = [523.25, 783.99, 1046.5];
       
       frequencies.forEach((freq, index) => {
@@ -245,8 +220,18 @@ export const PowerNapGuide: React.FC = () => {
         }, index * 500);
       });
     } catch (error) {
-      console.warn('Wakeup sound not supported:', error);
+      console.warn('Synthetic chimes not supported:', error);
     }
+  };
+
+  const testAmbientSound = () => {
+    if (!soundEnabled || ambientSound === 'silence') return;
+    
+    stopAmbientSound();
+    setTimeout(() => {
+      playAmbientSound();
+      setTimeout(() => stopAmbientSound(), 3000);
+    }, 100);
   };
 
   const startTimer = () => {
@@ -361,7 +346,7 @@ export const PowerNapGuide: React.FC = () => {
                       max="0.8"
                       step="0.1"
                       value={volume}
-                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      onChange={(e) => updateVolume(parseFloat(e.target.value))}
                       className="flex-1 h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
                     />
                     <span className="text-white/60 text-sm w-8">{Math.round(volume * 100)}%</span>
@@ -389,13 +374,7 @@ export const PowerNapGuide: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-blue-200 text-sm">Prova il suono selezionato (3 secondi):</span>
                     <button
-                      onClick={() => {
-                        stopAmbientSound();
-                        setTimeout(() => {
-                          createRelaxingAmbientSound(ambientSound);
-                          setTimeout(() => stopAmbientSound(), 3000);
-                        }, 100);
-                      }}
+                      onClick={testAmbientSound}
                       className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded text-sm hover:bg-blue-500/30 transition-colors"
                     >
                       Test Audio
