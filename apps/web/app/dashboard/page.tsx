@@ -1,330 +1,431 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
-import { Lightbulb, Clock, Target, RefreshCw } from 'lucide-react';
 
-interface MicroAdvice {
-  id: number;
-  message: string;
-  action: string;
-  duration_minutes: number;
-  priority: number;
-  tone: 'encouraging' | 'gentle' | 'celebratory' | 'supportive';
-  timing_optimal: boolean;
-  suggestion_key?: string;
-  generated_at: string;
-  expires_at: string;
+import React, { useRef, useEffect, useState } from 'react';
+import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight } from 'lucide-react';
+import MicroAdviceWidget from '../components/MicroAdviceWidget';
+
+interface MetricData {
+  label: string;
+  value: number;
+  trend: 'up' | 'down' | 'stable';
+  change: number;
 }
 
-interface MicroAdviceWidgetProps {
-  className?: string;
-  maxAdvices?: number;
-  autoRefresh?: boolean;
+interface ChartData {
+  day: string;
+  score: number;
+  stress: number;
+  energy: number;
+  sleep: number;
 }
 
-// Mock data per dimostrare il funzionamento
-const mockAdvices: MicroAdvice[] = [
-  {
-    id: 1,
-    message: "I tuoi livelli di energia sembrano bassi oggi. Una breve sessione di respirazione può aiutarti a ricentrarti e ritrovare focus.",
-    action: "Prova la respirazione 4-7-8 per 5 minuti",
-    duration_minutes: 5,
-    priority: 4,
-    tone: 'supportive',
-    timing_optimal: true,
-    suggestion_key: 'breathing-exercise',
-    generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 ore fa
-    expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() // tra 4 ore
-  },
-  {
-    id: 2,
-    message: "Hai completato il check-in per 3 giorni consecutivi! Questo è il momento perfetto per una camminata energizzante.",
-    action: "Fai una camminata di 10 minuti all'aria aperta",
-    duration_minutes: 10,
-    priority: 3,
-    tone: 'celebratory',
-    timing_optimal: true,
-    suggestion_key: '10min-walk',
-    generated_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 min fa
-    expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // tra 2 ore
-  },
-  {
-    id: 3,
-    message: "Il tuo stress level è aumentato negli ultimi giorni. Una sessione di meditazione guidata potrebbe essere molto benefica.",
-    action: "Inizia una meditazione di 5 minuti",
-    duration_minutes: 5,
-    priority: 5,
-    tone: 'gentle',
-    timing_optimal: false,
-    suggestion_key: 'guided-meditation',
-    generated_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 min fa
-    expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() // tra 6 ore
-  }
-];
-
-export default function MicroAdviceWidget({
-  className = '',
-  maxAdvices = 2,
-  autoRefresh = true
-}: MicroAdviceWidgetProps) {
-  const [advices, setAdvices] = useState<MicroAdvice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [interacting, setInteracting] = useState<number | null>(null);
-
-  const loadMicroAdvices = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Simula chiamata API
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setAdvices(mockAdvices.slice(0, maxAdvices));
-      setError(null);
-    } catch (err: any) {
-      console.error('Error loading micro advices:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [maxAdvices]);
-
-  const updateAdviceStatus = async (adviceId: number, status: string) => {
-    setInteracting(adviceId);
-
-    try {
-      // Simula chiamata API
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Remove the advice from the list if completed or dismissed
-      if (status === 'completed' || status === 'dismissed') {
-        setAdvices(prev => prev.filter(a => a.id !== adviceId));
-      }
-    } catch (err: any) {
-      console.error('Error updating advice status:', err);
-    } finally {
-      setInteracting(null);
-    }
-  };
-
-  const handleSuggestionClick = (suggestionKey: string) => {
-    if (typeof window !== 'undefined') {
-      window.location.href = `/suggestions/${suggestionKey}`;
-    }
-  };
+const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 0.1) => {
+  const [isIntersecting, setIsIntersecting] = useState(false);
 
   useEffect(() => {
-    loadMicroAdvices();
+    if (typeof window === 'undefined') return;
 
-    // Auto refresh ogni 30 minuti se abilitato
-    if (autoRefresh) {
-      const interval = setInterval(loadMicroAdvices, 30 * 60 * 1000);
-      return () => clearInterval(interval);
-    }
-  }, [loadMicroAdvices, autoRefresh]);
+    const element = ref.current;
+    if (!element) return;
 
-  const getToneStyles = (tone: string) => {
-    switch (tone) {
-      case 'celebratory':
-        return 'bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-400/30 text-purple-100';
-      case 'encouraging':
-        return 'bg-gradient-to-r from-green-500/10 to-blue-500/10 border-green-400/30 text-green-100';
-      case 'gentle':
-        return 'bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-blue-400/30 text-blue-100';
-      case 'supportive':
-        return 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-400/30 text-amber-100';
-      default:
-        return 'bg-white/10 border-white/20 text-white';
-    }
-  };
-
-  const getToneIcon = (tone: string) => {
-    switch (tone) {
-      case 'celebratory': return '🎉';
-      case 'encouraging': return '💪';
-      case 'gentle': return '🤗';
-      case 'supportive': return '🤝';
-      default: return '💡';
-    }
-  };
-
-  const formatTimeAgo = (dateString: string) => {
-    const now = new Date();
-    const generated = new Date(dateString);
-    const diffMs = now.getTime() - generated.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffHours > 0) {
-      return `${diffHours}h fa`;
-    } else if (diffMinutes > 0) {
-      return `${diffMinutes}m fa`;
-    } else {
-      return 'Ora';
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className={`animate-pulse ${className}`}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-6 h-6 bg-white/20 rounded"></div>
-          <div className="h-6 bg-white/20 rounded w-48"></div>
-        </div>
-        <div className="space-y-3">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="h-32 bg-white/10 rounded-lg border border-white/20"></div>
-          ))}
-        </div>
-      </div>
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsIntersecting(entry.isIntersecting),
+      { threshold }
     );
-  }
 
-  if (error) {
-    return (
-      <div className={`p-4 bg-red-500/10 border border-red-400/20 rounded-lg ${className}`}>
-        <div className="text-red-300 text-sm">
-          Errore nel caricamento dei micro-consigli: {error}
-        </div>
-      </div>
-    );
-  }
+    observer.observe(element);
+    return () => observer.unobserve(element);
+  }, [ref, threshold]);
 
-  if (advices.length === 0) {
-    return (
-      <div className={`p-6 text-center ${className}`}>
-        <div className="text-3xl mb-2">🌟</div>
-        <h3 className="text-lg font-medium text-white mb-1">Tutto sotto controllo!</h3>
-        <p className="text-sm text-white/60">
-          Non ci sono micro-consigli al momento. L'AI genererà nuovi suggerimenti basati sui tuoi pattern.
-        </p>
-      </div>
-    );
-  }
+  return isIntersecting;
+};
+
+const LifeScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 120 }) => {
+  const [mounted, setMounted] = useState(false);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(ringRef);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <div className={`w-${size} h-${size} bg-white/10 rounded-full animate-pulse`} />;
+
+  const circumference = 2 * Math.PI * 45;
+  const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <div className={className}>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Lightbulb className="w-6 h-6 text-blue-400" />
-          <h3 className="text-xl font-bold text-white">Consigli AI Personalizzati</h3>
+    <div ref={ringRef} className={`relative`} style={{ width: size, height: size }}>
+      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+        <circle
+          cx="50"
+          cy="50"
+          r="45"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth="8"
+          fill="none"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r="45"
+          stroke="url(#scoreGradient)"
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={isVisible ? strokeDashoffset : circumference}
+          className="transition-all duration-2000 ease-out"
+        />
+        <defs>
+          <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="50%" stopColor="#8B5CF6" />
+            <stop offset="100%" stopColor="#06B6D4" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-white">{score}</div>
+          <div className="text-xs text-white/60">LifeScore</div>
         </div>
-        <button
-          onClick={loadMicroAdvices}
-          className="p-2 text-white/60 hover:text-white transition-colors"
-          disabled={loading}
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+      </div>
+    </div>
+  );
+};
+
+const MetricCard: React.FC<{
+  metric: MetricData;
+  icon: React.ReactNode;
+  color: string;
+  delay: number;
+}> = ({ metric, icon, color, delay }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(cardRef);
+
+  return (
+    <div
+      ref={cardRef}
+      className={`group bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:border-white/40 transition-all duration-700 hover:scale-105 ${
+        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'
+      }`}
+      style={{ transitionDelay: isVisible ? `${delay}ms` : '0ms' }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className={`flex items-center justify-center w-12 h-12 bg-gradient-to-r ${color} rounded-xl group-hover:rotate-12 transition-transform duration-300`}>
+          {icon}
+        </div>
+        <div className={`text-sm px-2 py-1 rounded-full ${
+          metric.trend === 'up' ? 'bg-green-500/20 text-green-400' :
+          metric.trend === 'down' ? 'bg-red-500/20 text-red-400' :
+          'bg-gray-500/20 text-gray-400'
+        }`}>
+          {metric.trend === 'up' ? '↗' : metric.trend === 'down' ? '↘' : '→'} {metric.change}%
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {advices.slice(0, maxAdvices).map((advice, index) => (
-          <div
-            key={advice.id}
-            className={`border rounded-2xl p-6 transition-all backdrop-blur-lg ${getToneStyles(advice.tone)} hover:scale-[1.02] transform duration-300`}
-            style={{ 
-              animationDelay: `${index * 150}ms`,
-              animation: 'slideInUp 0.6s ease-out forwards'
-            }}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <span className="text-2xl">{getToneIcon(advice.tone)}</span>
-                <div className="flex items-center space-x-3">
-                  <div className="text-xs text-white/60">
-                    {formatTimeAgo(advice.generated_at)}
-                  </div>
-                  {advice.timing_optimal && (
-                    <div className="px-2 py-1 bg-green-500/20 text-green-300 rounded-full text-xs font-medium border border-green-400/30">
-                      ⚡ Momento ottimale
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1 px-2 py-1 bg-white/10 text-white/70 rounded-full text-xs border border-white/20">
-                    <Clock className="w-3 h-3" />
-                    {advice.duration_minutes} min
-                  </div>
-                </div>
+      <div className="text-2xl font-bold text-white mb-1">{metric.value}</div>
+      <div className="text-white/70 text-sm">{metric.label}</div>
+    </div>
+  );
+};
+
+const MiniChart: React.FC<{ data: ChartData[]; type: 'score' | 'stress' | 'energy' | 'sleep' }> = ({ data, type }) => {
+  const maxValue = Math.max(...data.map(d => d[type]));
+  const points = data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - (d[type] / maxValue) * 100}`).join(' ');
+
+  return (
+    <div className="w-full h-20">
+      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polyline
+          points={points}
+          fill="none"
+          stroke="url(#miniGradient)"
+          strokeWidth="2"
+          className="drop-shadow-sm"
+        />
+        <defs>
+          <linearGradient id="miniGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#8B5CF6" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+};
+
+const Dashboard: React.FC = () => {
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+
+    if (typeof window === 'undefined') return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const weekData: ChartData[] = [
+    { day: 'Lun', score: 85, stress: 6, energy: 7, sleep: 8 },
+    { day: 'Mar', score: 82, stress: 7, energy: 6, sleep: 7 },
+    { day: 'Mer', score: 88, stress: 5, energy: 8, sleep: 8 },
+    { day: 'Gio', score: 90, stress: 4, energy: 9, sleep: 9 },
+    { day: 'Ven', score: 87, stress: 6, energy: 7, sleep: 8 },
+    { day: 'Sab', score: 89, stress: 5, energy: 8, sleep: 8 },
+    { day: 'Dom', score: 87, stress: 5, energy: 7, sleep: 9 },
+  ];
+
+  const metrics: MetricData[] = [
+    { label: 'Stress Level', value: 5, trend: 'down', change: 12 },
+    { label: 'Energy Level', value: 7, trend: 'up', change: 8 },
+    { label: 'Sleep Quality', value: 8, trend: 'stable', change: 2 },
+    { label: 'Focus Score', value: 6, trend: 'up', change: 15 },
+  ];
+
+  const recentActivities = [
+    { id: 1, activity: 'Respirazione 4-7-8 completata', time: '2 ore fa', type: 'success' },
+    { id: 2, activity: 'Camminata energizzante (15 min)', time: '4 ore fa', type: 'energy' },
+    { id: 3, activity: 'Meditazione serale', time: 'Ieri', type: 'sleep' },
+    { id: 4, activity: 'Sessione Pomodoro completata', time: 'Ieri', type: 'focus' },
+  ];
+
+  return (
+    <div className="min-h-screen overflow-x-hidden">
+      {/* Fixed Background */}
+      <div
+        className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900"
+        style={{
+          background: mounted
+            ? `
+              radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px,
+                rgba(147, 197, 253, 0.1) 0%,
+                transparent 50%),
+              linear-gradient(135deg,
+                #0f172a 0%,
+                #1e1b4b 25%,
+                #312e81 50%,
+                #1e1b4b 75%,
+                #0f172a 100%)
+            `
+            : 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #312e81 50%, #1e1b4b 75%, #0f172a 100%)'
+        }}
+      />
+
+      {/* Navigation */}
+      <nav className="relative z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              LifeOS
+            </div>
+            <div className="hidden md:flex space-x-8 text-white/80">
+              <a href="/" className="hover:text-white transition-colors">Home</a>
+              <a href="/suggestions" className="hover:text-white transition-colors">Suggestions</a>
+              <a href="/dashboard" className="text-white font-semibold">Dashboard</a>
+              <a href="/profile" className="hover:text-white transition-colors">Profilo</a>
+            </div>
+            <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+              Logout
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Header */}
+      <section className="relative pt-20 pb-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+                La tua
+                <span className="block bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent">
+                  Dashboard
+                </span>
+              </h1>
+              <p className="text-xl text-white/70 max-w-2xl">
+                Monitora i tuoi progressi e scopri insights personalizzati sul tuo benessere
+              </p>
+            </div>
+
+            {/* Life Score Ring */}
+            <div className="flex-shrink-0">
+              <LifeScoreRing score={87} size={160} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MicroAdvice Widget - Sezione principale */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <MicroAdviceWidget 
+            className="bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10"
+            maxAdvices={2}
+            autoRefresh={true}
+          />
+        </div>
+      </section>
+
+      {/* Metrics Grid */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+            <Activity className="w-6 h-6 text-blue-400" />
+            Metriche principali
+          </h2>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            <MetricCard
+              metric={metrics[0]}
+              icon={<Brain className="w-6 h-6 text-white" />}
+              color="from-blue-500 to-purple-600"
+              delay={0}
+            />
+            <MetricCard
+              metric={metrics[1]}
+              icon={<Zap className="w-6 h-6 text-white" />}
+              color="from-orange-500 to-red-600"
+              delay={100}
+            />
+            <MetricCard
+              metric={metrics[2]}
+              icon={<Moon className="w-6 h-6 text-white" />}
+              color="from-indigo-500 to-purple-600"
+              delay={200}
+            />
+            <MetricCard
+              metric={metrics[3]}
+              icon={<Target className="w-6 h-6 text-white" />}
+              color="from-green-500 to-blue-600"
+              delay={300}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Charts Section */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Weekly Trend */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-6">
+                <TrendingUp className="w-6 h-6 text-green-400" />
+                <h3 className="text-xl font-bold text-white">Andamento settimanale</h3>
               </div>
 
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(advice.priority, 5) }).map((_, i) => (
-                  <div key={i} className="w-2 h-2 bg-current rounded-full opacity-60"></div>
+              <div className="space-y-4">
+                {[
+                  { label: 'LifeScore', type: 'score' as const, color: 'text-blue-400' },
+                  { label: 'Stress', type: 'stress' as const, color: 'text-red-400' },
+                  { label: 'Energia', type: 'energy' as const, color: 'text-orange-400' },
+                  { label: 'Sonno', type: 'sleep' as const, color: 'text-purple-400' },
+                ].map((item) => (
+                  <div key={item.type} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className={`text-sm font-medium ${item.color}`}>{item.label}</span>
+                      <span className="text-white text-sm">{weekData[weekData.length - 1][item.type]}</span>
+                    </div>
+                    <MiniChart data={weekData} type={item.type} />
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Message */}
-            <div className="mb-4">
-              <p className="text-sm leading-relaxed text-white/90">
-                {advice.message}
-              </p>
-            </div>
-
-            {/* Action */}
-            <div className="mb-6 p-4 bg-white/10 rounded-xl border border-white/10">
-              <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-white/80" />
-                <p className="text-sm font-medium text-white">
-                  {advice.action}
-                </p>
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center justify-between">
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => updateAdviceStatus(advice.id, 'completed')}
-                  disabled={interacting === advice.id}
-                  className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 border border-green-400/30"
-                >
-                  {interacting === advice.id ? 'Fatto...' : 'Completato ✓'}
-                </button>
-
-                <button
-                  onClick={() => updateAdviceStatus(advice.id, 'dismissed')}
-                  disabled={interacting === advice.id}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 border border-white/20"
-                >
-                  Non ora
-                </button>
+            {/* Recent Activity */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-6">
+                <Calendar className="w-6 h-6 text-purple-400" />
+                <h3 className="text-xl font-bold text-white">Attività recenti</h3>
               </div>
 
-              {advice.suggestion_key && (
-                <button
-                  onClick={() => handleSuggestionClick(advice.suggestion_key!)}
-                  className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg text-sm font-medium transition-colors border border-blue-400/30"
-                >
-                  Inizia →
-                </button>
-              )}
+              <div className="space-y-4">
+                {recentActivities.map((activity) => (
+                  <div key={activity.id} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
+                    <div className={`w-3 h-3 rounded-full ${
+                      activity.type === 'success' ? 'bg-green-400' :
+                      activity.type === 'energy' ? 'bg-orange-400' :
+                      activity.type === 'sleep' ? 'bg-purple-400' :
+                      'bg-blue-400'
+                    }`} />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">{activity.activity}</div>
+                      <div className="text-white/60 text-sm">{activity.time}</div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-white/40" />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        ))}
-      </div>
-
-      {mockAdvices.length > maxAdvices && (
-        <div className="mt-6 text-center">
-          <button
-            className="text-sm text-blue-300 hover:text-blue-200 transition-colors"
-            onClick={() => window.location.href = '/suggestions'}
-          >
-            Vedi tutti i consigli ({mockAdvices.length - maxAdvices} in più) →
-          </button>
         </div>
-      )}
+      </section>
 
-      <style jsx>{`
-        @keyframes slideInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
+      {/* Achievements */}
+      <section className="relative py-12 px-6">
+        <div className="container mx-auto max-w-6xl">
+          <div className="flex items-center gap-3 mb-8">
+            <Award className="w-6 h-6 text-yellow-400" />
+            <h2 className="text-2xl font-bold text-white">Achievements recenti</h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              { title: 'Settimana perfetta', description: '7 giorni consecutivi di consigli completati', icon: '🔥', unlocked: true },
+              { title: 'Maestro del respiro', description: '50 sessioni di respirazione completate', icon: '🫁', unlocked: true },
+              { title: 'Energia stabile', description: 'Mantieni energia >7 per 5 giorni', icon: '⚡', unlocked: false },
+            ].map((achievement, index) => (
+              <div key={index} className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 ${achievement.unlocked ? 'opacity-100' : 'opacity-60'}`}>
+                <div className="text-4xl mb-4">{achievement.icon}</div>
+                <h3 className="text-lg font-bold text-white mb-2">{achievement.title}</h3>
+                <p className="text-white/70 text-sm">{achievement.description}</p>
+                {achievement.unlocked && (
+                  <div className="mt-4 text-green-400 text-sm font-medium">✅ Sbloccato</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Actions */}
+      <section className="relative py-20 px-6">
+        <div className="container mx-auto max-w-4xl text-center">
+          <div className="bg-white/5 backdrop-blur-lg rounded-3xl p-12 border border-white/10">
+            <h2 className="text-3xl font-bold text-white mb-6">
+              Pronto per i prossimi consigli?
+            </h2>
+            <p className="text-xl text-white/70 mb-8">
+              Continua il tuo percorso di benessere con suggerimenti personalizzati
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <a
+                href="/suggestions"
+                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform"
+              >
+                Nuovi Consigli
+              </a>
+              <a
+                href="/profile"
+                className="border-2 border-white/30 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 transition-colors"
+              >
+                Aggiorna Profilo
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
-}
+};
+
+export default Dashboard;
