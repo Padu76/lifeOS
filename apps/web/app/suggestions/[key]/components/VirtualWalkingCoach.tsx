@@ -94,7 +94,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   }, [currentTime, isActive, currentPhase]);
 
   const checkAchievements = (time: number, steps: number) => {
-    const newAchievements = [];
+    const newAchievements: string[] = [];
     
     if (time >= 180 && !achievements.includes('3min')) {
       newAchievements.push('3min');
