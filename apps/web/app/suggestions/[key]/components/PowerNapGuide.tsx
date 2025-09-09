@@ -161,17 +161,34 @@ export const PowerNapGuide: React.FC = () => {
     const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
     if (!audioUrl) return;
 
+    console.log(`Testing audio: ${ambientSound}`);
+
     setTimeout(() => {
       testHowlRef.current = new Howl({
         src: [audioUrl],
-        loop: false,
+        loop: false, // Non fare loop per il test
         volume: volume,
         html5: true,
         preload: true,
+        onload: () => {
+          console.log(`Test audio loaded: ${ambientSound}`);
+        },
         onloaderror: (id, error) => {
-          console.warn('Test audio loading error:', error);
+          console.warn(`Test audio loading error for ${ambientSound}:`, error);
+          // Prova con Web Audio fallback per test
+          createFallbackSound(ambientSound);
+          setTimeout(() => {
+            // Stop fallback dopo 3 secondi
+            try {
+              // Fallback non ha stop method, ignoralo
+            } catch (e) {}
+          }, 3000);
+        },
+        onplay: () => {
+          console.log(`Test audio playing: ${ambientSound}`);
         },
         onend: () => {
+          console.log(`Test audio finished: ${ambientSound}`);
           // Cleanup automatico dopo test
           if (testHowlRef.current) {
             testHowlRef.current.unload();
@@ -180,9 +197,15 @@ export const PowerNapGuide: React.FC = () => {
         }
       });
 
-      testHowlRef.current.play();
+      const playPromise = testHowlRef.current.play();
+      if (playPromise !== undefined && typeof playPromise.then === 'function') {
+        playPromise.catch((error) => {
+          console.warn(`Test play failed for ${ambientSound}:`, error);
+          createFallbackSound(ambientSound);
+        });
+      }
       
-      // Stop automatico dopo 3 secondi
+      // Stop automatico dopo 3 secondi per il test
       setTimeout(() => {
         if (testHowlRef.current) {
           testHowlRef.current.stop();
