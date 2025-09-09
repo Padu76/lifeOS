@@ -235,7 +235,7 @@ const Settings: React.FC = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
-            <Settings className="w-8 h-8 text-blue-400" />
+            <SettingsIcon className="w-8 h-8 text-blue-400" />
             Impostazioni
           </h1>
           <p className="text-white/70">Personalizza la tua esperienza LifeOS</p>

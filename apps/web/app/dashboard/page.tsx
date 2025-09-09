@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight } from 'lucide-react';
 import MicroAdviceWidget from '../../components/MicroAdviceWidget';
-import { supabase, callEdgeFunction, getCurrentUser } from '../../../lib/supabase';
+import { supabase, callEdgeFunction, getCurrentUser } from '../../lib/supabase';
 
 interface MetricData {
   label: string;
