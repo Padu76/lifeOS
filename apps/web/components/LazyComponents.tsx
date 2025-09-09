@@ -71,8 +71,8 @@ export function useMemoryOptimization() {
     // Cleanup event listeners on unmount
     return () => {
       // Force garbage collection hint
-      if (typeof window !== 'undefined' && window.gc) {
-        window.gc();
+      if (typeof window !== 'undefined' && (window as any).gc) {
+        (window as any).gc();
       }
     };
   }, []);
@@ -165,23 +165,3 @@ export function useVirtualScrolling<T>(
     },
   };
 }
-
-export default {
-  LazyMicroAdviceWidget,
-  LazyLineChart,
-  LazyAreaChart,
-  LazyBarChart,
-  LazyLifeScoreRing,
-  LazyMetricCard,
-  LazySettingsForm,
-  LazySuggestionCard,
-  LazyAudioPlayer,
-  LazyAnimatedBackground,
-  LazyModal,
-  LazyDatePicker,
-  LazyImageGallery,
-  withIntersectionLazyLoad,
-  useMemoryOptimization,
-  useAnimationOptimization,
-  useVirtualScrolling,
-};
