@@ -348,7 +348,7 @@ const HomePage: React.FC = () => {
             <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
               LifeOS
             </Link>
-            <div className="hidden md:flex space-x-8 text-white/80">
+            <div className="hidden md:flex space-x-8 text-white font-bold text-lg">
               <Link href="/" className="hover:text-white transition-colors">Home</Link>
               <Link href="/suggestions" className="hover:text-white transition-colors">Suggestions</Link>
               <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
