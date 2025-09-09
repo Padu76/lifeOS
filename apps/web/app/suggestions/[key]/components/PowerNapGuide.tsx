@@ -13,8 +13,10 @@ export const PowerNapGuide: React.FC = () => {
   const [customTime, setCustomTime] = useState(15);
   const [volume, setVolume] = useState(0.3);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const howlRef = useRef<Howl | null>(null);
-  const testHowlRef = useRef<Howl | null>(null);
+  
+  // Array per tracciare TUTTE le istanze audio attive
+  const activeAudioRef = useRef<Howl[]>([]);
+  const currentAudioRef = useRef<Howl | null>(null);
 
   // Audio URLs - file reali caricati in /public/audio/
   const audioSources = {
@@ -24,23 +26,43 @@ export const PowerNapGuide: React.FC = () => {
     chimes: '/audio/chimes.mp3'
   };
 
-  // Funzione per fermare TUTTO l'audio
+  // Funzione AGGRESSIVA per fermare TUTTO l'audio
   const stopAllAudio = () => {
-    // Ferma audio principale
-    if (howlRef.current) {
-      howlRef.current.stop();
-      howlRef.current.unload();
-      howlRef.current = null;
+    console.log('STOP ALL AUDIO - Cleaning everything');
+    
+    // Ferma tutti gli audio nell'array
+    activeAudioRef.current.forEach((howl, index) => {
+      try {
+        console.log(`Stopping audio ${index}`);
+        howl.stop();
+        howl.unload();
+      } catch (e) {
+        console.warn(`Error stopping audio ${index}:`, e);
+      }
+    });
+    
+    // Pulisci array
+    activeAudioRef.current = [];
+    
+    // Pulisci riferimento corrente
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.stop();
+        currentAudioRef.current.unload();
+      } catch (e) {
+        console.warn('Error stopping current audio:', e);
+      }
+      currentAudioRef.current = null;
     }
     
-    // Ferma audio di test
-    if (testHowlRef.current) {
-      testHowlRef.current.stop();
-      testHowlRef.current.unload();
-      testHowlRef.current = null;
+    // Cleanup globale Howler (se disponibile)
+    try {
+      if (typeof window !== 'undefined' && (window as any).Howler) {
+        (window as any).Howler.stop();
+      }
+    } catch (e) {
+      console.warn('Global Howler stop failed:', e);
     }
-    
-    // Le istanze specifiche sono già gestite dai ref sopra
   };
 
   useEffect(() => {
@@ -77,83 +99,78 @@ export const PowerNapGuide: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const createNewHowl = (audioUrl: string, isLoop: boolean = true, volumeLevel: number = volume) => {
+    const howl = new Howl({
+      src: [audioUrl],
+      loop: isLoop,
+      volume: volumeLevel,
+      html5: true,
+      preload: true,
+      onload: () => {
+        console.log(`Audio loaded: ${audioUrl}`);
+      },
+      onloaderror: (id, error) => {
+        console.warn(`Audio loading error for ${audioUrl}:`, error);
+        // Rimuovi dall'array se fallisce
+        const index = activeAudioRef.current.indexOf(howl);
+        if (index > -1) {
+          activeAudioRef.current.splice(index, 1);
+        }
+      },
+      onplayerror: (id, error) => {
+        console.warn(`Audio play error for ${audioUrl}:`, error);
+      },
+      onplay: () => {
+        console.log(`Audio playing: ${audioUrl}`);
+      },
+      onend: () => {
+        console.log(`Audio ended: ${audioUrl}`);
+        if (!isLoop) {
+          // Rimuovi dall'array quando finisce (per suoni non-loop come test e chimes)
+          const index = activeAudioRef.current.indexOf(howl);
+          if (index > -1) {
+            activeAudioRef.current.splice(index, 1);
+          }
+        }
+      }
+    });
+    
+    // Aggiungi all'array di tracking
+    activeAudioRef.current.push(howl);
+    return howl;
+  };
+
   const playAmbientSound = () => {
     if (!soundEnabled || ambientSound === 'silence') return;
     
-    try {
-      // STOP tutto prima di iniziare nuovo audio
-      stopAllAudio();
-      
-      const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
-      if (!audioUrl) return;
-
-      // Attendi un momento per assicurarsi che tutto sia fermato
-      setTimeout(() => {
-        howlRef.current = new Howl({
-          src: [audioUrl],
-          loop: true,
-          volume: volume,
-          html5: true,
-          preload: true,
-          onloaderror: (id, error) => {
-            console.warn('Audio loading error:', error);
-            createFallbackSound(ambientSound);
-          },
-          onplayerror: (id, error) => {
-            console.warn('Audio play error:', error);
-            createFallbackSound(ambientSound);
-          }
-        });
-
-        howlRef.current.play();
-      }, 100);
-      
-    } catch (error) {
-      console.warn('Howler not supported:', error);
-      createFallbackSound(ambientSound);
-    }
-  };
-
-  const updateVolume = (newVolume: number) => {
-    setVolume(newVolume);
-    if (howlRef.current) {
-      howlRef.current.volume(newVolume);
-    }
-  };
-
-  const playWakeupChimes = () => {
-    if (!soundEnabled) return;
+    console.log(`Starting ambient sound: ${ambientSound}`);
     
-    try {
-      // Stop tutto prima delle campanelle
-      stopAllAudio();
-      
-      setTimeout(() => {
-        const chimes = new Howl({
-          src: [audioSources.chimes],
-          volume: volume * 0.8,
-          html5: true,
-          preload: true,
-          onloaderror: () => {
-            createSyntheticChimes();
-          },
-          onend: () => {
-            // Cleanup automatico dopo riproduzione
-            chimes.unload();
-          }
-        });
+    // STOP tutto prima di iniziare
+    stopAllAudio();
+    
+    const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
+    if (!audioUrl) return;
+
+    // Attendi per essere sicuri che tutto sia fermato
+    setTimeout(() => {
+      try {
+        const howl = createNewHowl(audioUrl, true, volume);
+        currentAudioRef.current = howl;
         
-        chimes.play();
-      }, 200);
-      
-    } catch (error) {
-      console.warn('Chimes not supported:', error);
-      createSyntheticChimes();
-    }
+        const playResult = howl.play();
+        console.log(`Play result for ${ambientSound}:`, playResult);
+        
+      } catch (error) {
+        console.warn('Error creating ambient sound:', error);
+        createFallbackSound(ambientSound);
+      }
+    }, 200);
   };
 
   const testAmbientSound = () => {
     if (!soundEnabled || ambientSound === 'silence') return;
+    
+    console.log(`Testing audio: ${ambientSound}`);
     
     // STOP tutto prima del test
     stopAllAudio();
@@ -161,66 +178,68 @@ export const PowerNapGuide: React.FC = () => {
     const audioUrl = audioSources[ambientSound as keyof typeof audioSources];
     if (!audioUrl) return;
 
-    console.log(`Testing audio: ${ambientSound}`);
-
     setTimeout(() => {
-      testHowlRef.current = new Howl({
-        src: [audioUrl],
-        loop: false, // Non fare loop per il test
-        volume: volume,
-        html5: true,
-        preload: true,
-        onload: () => {
-          console.log(`Test audio loaded: ${ambientSound}`);
-        },
-        onloaderror: (id, error) => {
-          console.warn(`Test audio loading error for ${ambientSound}:`, error);
-          // Prova con Web Audio fallback per test
-          createFallbackSound(ambientSound);
-          setTimeout(() => {
-            // Stop fallback dopo 3 secondi
-            try {
-              // Fallback non ha stop method, ignoralo
-            } catch (e) {}
-          }, 3000);
-        },
-        onplay: () => {
-          console.log(`Test audio playing: ${ambientSound}`);
-        },
-        onend: () => {
-          console.log(`Test audio finished: ${ambientSound}`);
-          // Cleanup automatico dopo test
-          if (testHowlRef.current) {
-            testHowlRef.current.unload();
-            testHowlRef.current = null;
+      try {
+        const howl = createNewHowl(audioUrl, false, volume); // Non loop per test
+        
+        howl.play();
+        
+        // Auto-stop dopo 3 secondi
+        setTimeout(() => {
+          try {
+            const index = activeAudioRef.current.indexOf(howl);
+            if (index > -1) {
+              console.log('Stopping test audio after 3 seconds');
+              howl.stop();
+              howl.unload();
+              activeAudioRef.current.splice(index, 1);
+            }
+          } catch (e) {
+            console.warn('Error stopping test audio:', e);
           }
-        }
-      });
-
-      const playPromise = testHowlRef.current.play();
-      if (playPromise !== undefined && typeof playPromise === 'object' && 'then' in playPromise) {
-        // Cast a Promise per TypeScript
-        (playPromise as Promise<any>).catch((error) => {
-          console.warn(`Test play failed for ${ambientSound}:`, error);
-          createFallbackSound(ambientSound);
-        });
+        }, 3000);
+        
+      } catch (error) {
+        console.warn('Error creating test sound:', error);
       }
-      
-      // Stop automatico dopo 3 secondi per il test
-      setTimeout(() => {
-        if (testHowlRef.current) {
-          testHowlRef.current.stop();
-          testHowlRef.current.unload();
-          testHowlRef.current = null;
-        }
-      }, 3000);
-      
     }, 100);
   };
 
-  // Fallback per quando Howler.js non funziona
+  const updateVolume = (newVolume: number) => {
+    setVolume(newVolume);
+    // Aggiorna volume di tutti gli audio attivi
+    activeAudioRef.current.forEach(howl => {
+      try {
+        howl.volume(newVolume);
+      } catch (e) {
+        console.warn('Error updating volume:', e);
+      }
+    });
+  };
+
+  const playWakeupChimes = () => {
+    if (!soundEnabled) return;
+    
+    console.log('Playing wakeup chimes');
+    
+    const chimesUrl = audioSources.chimes;
+    
+    setTimeout(() => {
+      try {
+        const chimesHowl = createNewHowl(chimesUrl, false, volume * 0.8);
+        chimesHowl.play();
+      } catch (error) {
+        console.warn('Error playing chimes:', error);
+        createSyntheticChimes();
+      }
+    }, 100);
+  };
+
+  // Fallback Web Audio API
   const createFallbackSound = (type: string) => {
     if (!soundEnabled) return;
+    
+    console.log(`Creating fallback sound: ${type}`);
     
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -315,26 +334,29 @@ export const PowerNapGuide: React.FC = () => {
   };
 
   const startTimer = () => {
-    stopAllAudio(); // Stop tutto prima di iniziare
+    console.log('Starting timer');
+    stopAllAudio();
     setTimeLeft(customTime * 60);
     setIsActive(true);
     setPhase('timer');
     if (soundEnabled) {
-      setTimeout(() => playAmbientSound(), 300);
+      setTimeout(() => playAmbientSound(), 400);
     }
   };
 
   const pauseTimer = () => {
+    console.log(`Timer ${isActive ? 'pausing' : 'resuming'}`);
     if (isActive) {
       stopAllAudio();
     }
     setIsActive(!isActive);
     if (!isActive && soundEnabled) {
-      setTimeout(() => playAmbientSound(), 200);
+      setTimeout(() => playAmbientSound(), 300);
     }
   };
 
   const resetTimer = () => {
+    console.log('Resetting timer');
     setIsActive(false);
     setTimeLeft(customTime * 60);
     setPhase('preparation');
@@ -342,6 +364,7 @@ export const PowerNapGuide: React.FC = () => {
   };
 
   const completeSession = () => {
+    console.log('Completing session');
     setPhase('completed');
     stopAllAudio();
   };
@@ -349,13 +372,16 @@ export const PowerNapGuide: React.FC = () => {
   // Cleanup quando cambia il suono ambientale
   useEffect(() => {
     if (phase === 'timer' && isActive && soundEnabled) {
+      console.log(`Ambient sound changed to: ${ambientSound}`);
       stopAllAudio();
-      setTimeout(() => playAmbientSound(), 200);
+      setTimeout(() => playAmbientSound(), 300);
     }
   }, [ambientSound]);
 
+  // Cleanup globale
   useEffect(() => {
     return () => {
+      console.log('Component unmounting - cleaning all audio');
       stopAllAudio();
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -408,7 +434,8 @@ export const PowerNapGuide: React.FC = () => {
                     <button
                       key={sound.key}
                       onClick={() => {
-                        stopAllAudio(); // Stop tutto quando cambi suono
+                        console.log(`Selecting sound: ${sound.key}`);
+                        stopAllAudio();
                         setAmbientSound(sound.key);
                       }}
                       className={`p-3 rounded-lg transition-all flex items-center gap-3 ${
@@ -451,7 +478,8 @@ export const PowerNapGuide: React.FC = () => {
                 <span className="text-white font-medium">Suoni abilitati</span>
                 <button
                   onClick={() => {
-                    stopAllAudio(); // Stop tutto quando disabiliti audio
+                    console.log(`Sound ${soundEnabled ? 'disabled' : 'enabled'}`);
+                    stopAllAudio();
                     setSoundEnabled(!soundEnabled);
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
@@ -470,7 +498,10 @@ export const PowerNapGuide: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-blue-200 text-sm">Prova il suono selezionato (3 secondi):</span>
                     <button
-                      onClick={testAmbientSound}
+                      onClick={() => {
+                        console.log('Test button clicked');
+                        testAmbientSound();
+                      }}
                       className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded text-sm hover:bg-blue-500/30 transition-colors"
                     >
                       Test Audio
@@ -580,6 +611,7 @@ export const PowerNapGuide: React.FC = () => {
 
             <button
               onClick={() => {
+                console.log(`Audio toggle: ${soundEnabled ? 'off' : 'on'}`);
                 setSoundEnabled(!soundEnabled);
                 if (soundEnabled) {
                   stopAllAudio();
