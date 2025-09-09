@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Play, Pause, CheckCircle, Clock, Zap, Brain, Moon, Heart, Activity, Volume2, VolumeX, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
 
 function MMSS(total: number) {
   const m = Math.floor(total / 60);
@@ -44,18 +46,6 @@ const mockUserProfile: UserProfile = {
   timeOfDay: 'evening',
   preferredStyle: 'breathing-focused'
 };
-
-// Mock router per gestire navigazione
-const mockRouter = {
-  push: (url: string) => {
-    if (typeof window !== 'undefined') {
-      window.location.href = url;
-    }
-  }
-};
-
-// Mock params per demo
-const mockParams = { key: '5min-meditation' };
 
 // Script di meditazione personalizzati con tipizzazione corretta
 const getMeditationScript = (profile: UserProfile, duration: number): MeditationStep[] => {
@@ -748,7 +738,9 @@ function DeepBreathingGuide() {
 }
 
 export default function ModernSuggestionDetail() {
-  const key = String(mockParams?.key ?? '');
+  const params = useParams();
+  const key = String(params?.key ?? '');
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -822,20 +814,12 @@ export default function ModernSuggestionDetail() {
       // await fetch('/api/activity/complete', { ... })
       
       setMsg('Attività completata!');
-      setTimeout(() => mockRouter.push('/suggestions'), 1500);
+      setTimeout(() => router.push('/suggestions'), 1500);
     } catch (e: any) {
       setMsg('Errore durante il salvataggio');
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleBackClick = () => {
-    mockRouter.push('/suggestions');
-  };
-
-  const handleHomeClick = () => {
-    mockRouter.push('/');
   };
 
   return (
@@ -850,19 +834,16 @@ export default function ModernSuggestionDetail() {
       <nav className="relative z-50 bg-black/20 backdrop-blur-lg border-b border-white/10">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <button 
-              onClick={handleHomeClick}
-              className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent"
-            >
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
               LifeOS
-            </button>
-            <button 
-              onClick={handleBackClick}
+            </Link>
+            <Link 
+              href="/suggestions"
               className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Torna ai consigli
-            </button>
+            </Link>
           </div>
         </div>
       </nav>
