@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Moon, Clock, CheckCircle } from 'lucide-react';
 
+interface AudioSource {
+  stop: () => void;
+}
+
 export const PowerNapGuide: React.FC = () => {
   const [phase, setPhase] = useState<'preparation' | 'timer' | 'wakeup' | 'completed'>('preparation');
   const [timeLeft, setTimeLeft] = useState(15 * 60);
@@ -12,7 +16,7 @@ export const PowerNapGuide: React.FC = () => {
   const [customTime, setCustomTime] = useState(15);
   const [volume, setVolume] = useState(0.3);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioSourceRef = useRef<AudioSource | null>(null);
 
   useEffect(() => {
     if (isActive && timeLeft > 0) {
@@ -99,7 +103,15 @@ export const PowerNapGuide: React.FC = () => {
           gainNode.connect(audioContext.destination);
           whiteNoise.start();
           
-          audioRef.current = whiteNoise as any;
+          audioSourceRef.current = {
+            stop: () => {
+              try {
+                whiteNoise.stop();
+              } catch (e) {
+                // Already stopped
+              }
+            }
+          };
           break;
 
         case 'ocean':
@@ -128,7 +140,16 @@ export const PowerNapGuide: React.FC = () => {
           oscillator1.start();
           oscillator2.start();
           
-          audioRef.current = { stop: () => { oscillator1.stop(); oscillator2.stop(); } } as any;
+          audioSourceRef.current = {
+            stop: () => {
+              try {
+                oscillator1.stop();
+                oscillator2.stop();
+              } catch (e) {
+                // Already stopped
+              }
+            }
+          };
           break;
 
         case 'forest':
@@ -156,7 +177,15 @@ export const PowerNapGuide: React.FC = () => {
             gains.push(gain);
           });
           
-          audioRef.current = { stop: () => oscillators.forEach(osc => osc.stop()) } as any;
+          audioSourceRef.current = {
+            stop: () => {
+              try {
+                oscillators.forEach(osc => osc.stop());
+              } catch (e) {
+                // Already stopped
+              }
+            }
+          };
           break;
       }
     } catch (error) {
@@ -179,11 +208,9 @@ export const PowerNapGuide: React.FC = () => {
 
   const stopAmbientSound = () => {
     try {
-      if (audioRef.current) {
-        if (typeof audioRef.current.stop === 'function') {
-          audioRef.current.stop();
-        }
-        audioRef.current = null;
+      if (audioSourceRef.current) {
+        audioSourceRef.current.stop();
+        audioSourceRef.current = null;
       }
     } catch (error) {
       console.warn('Error stopping audio:', error);
