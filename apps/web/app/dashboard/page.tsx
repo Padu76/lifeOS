@@ -3,6 +3,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight } from 'lucide-react';
 import MicroAdviceWidget from '../../components/MicroAdviceWidget';
+import { supabase, callEdgeFunction, getCurrentUser } from '../../../lib/supabase';
 
 interface MetricData {
   label: string;
@@ -17,6 +18,24 @@ interface ChartData {
   stress: number;
   energy: number;
   sleep: number;
+}
+
+interface DashboardData {
+  life_score: number;
+  metrics: MetricData[];
+  weekly_data: ChartData[];
+  recent_activities: Array<{
+    id: number;
+    activity: string;
+    time: string;
+    type: string;
+  }>;
+  achievements: Array<{
+    title: string;
+    description: string;
+    icon: string;
+    unlocked: boolean;
+  }>;
 }
 
 const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 0.1) => {
@@ -160,6 +179,91 @@ const MiniChart: React.FC<{ data: ChartData[]; type: 'score' | 'stress' | 'energ
 const Dashboard: React.FC = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+
+  // Mock data fallback
+  const fallbackData: DashboardData = {
+    life_score: 87,
+    metrics: [
+      { label: 'Stress Level', value: 5, trend: 'down', change: 12 },
+      { label: 'Energy Level', value: 7, trend: 'up', change: 8 },
+      { label: 'Sleep Quality', value: 8, trend: 'stable', change: 2 },
+      { label: 'Focus Score', value: 6, trend: 'up', change: 15 },
+    ],
+    weekly_data: [
+      { day: 'Lun', score: 85, stress: 6, energy: 7, sleep: 8 },
+      { day: 'Mar', score: 82, stress: 7, energy: 6, sleep: 7 },
+      { day: 'Mer', score: 88, stress: 5, energy: 8, sleep: 8 },
+      { day: 'Gio', score: 90, stress: 4, energy: 9, sleep: 9 },
+      { day: 'Ven', score: 87, stress: 6, energy: 7, sleep: 8 },
+      { day: 'Sab', score: 89, stress: 5, energy: 8, sleep: 8 },
+      { day: 'Dom', score: 87, stress: 5, energy: 7, sleep: 9 },
+    ],
+    recent_activities: [
+      { id: 1, activity: 'Respirazione 4-7-8 completata', time: '2 ore fa', type: 'success' },
+      { id: 2, activity: 'Camminata energizzante (15 min)', time: '4 ore fa', type: 'energy' },
+      { id: 3, activity: 'Meditazione serale', time: 'Ieri', type: 'sleep' },
+      { id: 4, activity: 'Sessione Pomodoro completata', time: 'Ieri', type: 'focus' },
+    ],
+    achievements: [
+      { title: 'Settimana perfetta', description: '7 giorni consecutivi di consigli completati', icon: '🔥', unlocked: true },
+      { title: 'Maestro del respiro', description: '50 sessioni di respirazione completate', icon: '🫁', unlocked: true },
+      { title: 'Energia stabile', description: 'Mantieni energia >7 per 5 giorni', icon: '⚡', unlocked: false },
+    ]
+  };
+
+  // Carica utente e dati dashboard
+  useEffect(() => {
+    const loadDashboard = async () => {
+      setLoading(true);
+      
+      try {
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+        
+        if (!currentUser) {
+          setError('Utente non autenticato');
+          setDashboardData(fallbackData);
+          return;
+        }
+
+        console.log('Calling get-wellness-dashboard Edge Function...');
+        
+        // Chiamata alla Edge Function per ottenere dati dashboard
+        const data = await callEdgeFunction('get-wellness-dashboard', {
+          user_id: currentUser.id,
+          time_range: '7d',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        });
+
+        console.log('Dashboard API response:', data);
+        
+        if (data && data.dashboard) {
+          setDashboardData({
+            life_score: data.dashboard.life_score || fallbackData.life_score,
+            metrics: data.dashboard.metrics || fallbackData.metrics,
+            weekly_data: data.dashboard.weekly_data || fallbackData.weekly_data,
+            recent_activities: data.dashboard.recent_activities || fallbackData.recent_activities,
+            achievements: data.dashboard.achievements || fallbackData.achievements
+          });
+        } else {
+          setDashboardData(fallbackData);
+        }
+        
+      } catch (err: any) {
+        console.error('Error loading dashboard:', err);
+        setError(err.message);
+        setDashboardData(fallbackData); // Fallback ai mock data
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboard();
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -174,29 +278,32 @@ const Dashboard: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  const weekData: ChartData[] = [
-    { day: 'Lun', score: 85, stress: 6, energy: 7, sleep: 8 },
-    { day: 'Mar', score: 82, stress: 7, energy: 6, sleep: 7 },
-    { day: 'Mer', score: 88, stress: 5, energy: 8, sleep: 8 },
-    { day: 'Gio', score: 90, stress: 4, energy: 9, sleep: 9 },
-    { day: 'Ven', score: 87, stress: 6, energy: 7, sleep: 8 },
-    { day: 'Sab', score: 89, stress: 5, energy: 8, sleep: 8 },
-    { day: 'Dom', score: 87, stress: 5, energy: 7, sleep: 9 },
-  ];
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-white text-lg">Caricamento dashboard...</div>
+        </div>
+      </div>
+    );
+  }
 
-  const metrics: MetricData[] = [
-    { label: 'Stress Level', value: 5, trend: 'down', change: 12 },
-    { label: 'Energy Level', value: 7, trend: 'up', change: 8 },
-    { label: 'Sleep Quality', value: 8, trend: 'stable', change: 2 },
-    { label: 'Focus Score', value: 6, trend: 'up', change: 15 },
-  ];
-
-  const recentActivities = [
-    { id: 1, activity: 'Respirazione 4-7-8 completata', time: '2 ore fa', type: 'success' },
-    { id: 2, activity: 'Camminata energizzante (15 min)', time: '4 ore fa', type: 'energy' },
-    { id: 3, activity: 'Meditazione serale', time: 'Ieri', type: 'sleep' },
-    { id: 4, activity: 'Sessione Pomodoro completata', time: 'Ieri', type: 'focus' },
-  ];
+  if (!dashboardData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-400 text-lg mb-4">Errore nel caricamento della dashboard</div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-6 py-2 rounded-lg transition-colors"
+          >
+            Riprova
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen overflow-x-hidden">
@@ -233,7 +340,13 @@ const Dashboard: React.FC = () => {
               <a href="/dashboard" className="text-white font-semibold">Dashboard</a>
               <a href="/profile" className="hover:text-white transition-colors">Profilo</a>
             </div>
-            <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+            <button 
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.href = '/';
+              }}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform"
+            >
               Logout
             </button>
           </div>
@@ -254,11 +367,16 @@ const Dashboard: React.FC = () => {
               <p className="text-xl text-white/70 max-w-2xl">
                 Monitora i tuoi progressi e scopri insights personalizzati sul tuo benessere
               </p>
+              {error && (
+                <div className="mt-4 text-sm text-yellow-400 bg-yellow-500/20 px-3 py-1 rounded-lg inline-block">
+                  API non disponibile - modalità fallback attiva
+                </div>
+              )}
             </div>
 
             {/* Life Score Ring */}
             <div className="flex-shrink-0">
-              <LifeScoreRing score={87} size={160} />
+              <LifeScoreRing score={dashboardData.life_score} size={160} />
             </div>
           </div>
         </div>
@@ -285,25 +403,25 @@ const Dashboard: React.FC = () => {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
             <MetricCard
-              metric={metrics[0]}
+              metric={dashboardData.metrics[0]}
               icon={<Brain className="w-6 h-6 text-white" />}
               color="from-blue-500 to-purple-600"
               delay={0}
             />
             <MetricCard
-              metric={metrics[1]}
+              metric={dashboardData.metrics[1]}
               icon={<Zap className="w-6 h-6 text-white" />}
               color="from-orange-500 to-red-600"
               delay={100}
             />
             <MetricCard
-              metric={metrics[2]}
+              metric={dashboardData.metrics[2]}
               icon={<Moon className="w-6 h-6 text-white" />}
               color="from-indigo-500 to-purple-600"
               delay={200}
             />
             <MetricCard
-              metric={metrics[3]}
+              metric={dashboardData.metrics[3]}
               icon={<Target className="w-6 h-6 text-white" />}
               color="from-green-500 to-blue-600"
               delay={300}
@@ -333,9 +451,9 @@ const Dashboard: React.FC = () => {
                   <div key={item.type} className="space-y-2">
                     <div className="flex justify-between items-center">
                       <span className={`text-sm font-medium ${item.color}`}>{item.label}</span>
-                      <span className="text-white text-sm">{weekData[weekData.length - 1][item.type]}</span>
+                      <span className="text-white text-sm">{dashboardData.weekly_data[dashboardData.weekly_data.length - 1][item.type]}</span>
                     </div>
-                    <MiniChart data={weekData} type={item.type} />
+                    <MiniChart data={dashboardData.weekly_data} type={item.type} />
                   </div>
                 ))}
               </div>
@@ -349,7 +467,7 @@ const Dashboard: React.FC = () => {
               </div>
 
               <div className="space-y-4">
-                {recentActivities.map((activity) => (
+                {dashboardData.recent_activities.map((activity) => (
                   <div key={activity.id} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
                     <div className={`w-3 h-3 rounded-full ${
                       activity.type === 'success' ? 'bg-green-400' :
@@ -379,11 +497,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {[
-              { title: 'Settimana perfetta', description: '7 giorni consecutivi di consigli completati', icon: '🔥', unlocked: true },
-              { title: 'Maestro del respiro', description: '50 sessioni di respirazione completate', icon: '🫁', unlocked: true },
-              { title: 'Energia stabile', description: 'Mantieni energia >7 per 5 giorni', icon: '⚡', unlocked: false },
-            ].map((achievement, index) => (
+            {dashboardData.achievements.map((achievement, index) => (
               <div key={index} className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 ${achievement.unlocked ? 'opacity-100' : 'opacity-60'}`}>
                 <div className="text-4xl mb-4">{achievement.icon}</div>
                 <h3 className="text-lg font-bold text-white mb-2">{achievement.title}</h3>
