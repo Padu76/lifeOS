@@ -81,6 +81,12 @@ const nextConfig = {
       );
     }
 
+    // Exclude Storybook files from build
+    config.module.rules.push({
+      test: /\.stories\.(js|jsx|ts|tsx|mdx)$/,
+      use: 'ignore-loader',
+    });
+
     // Production optimizations
     if (!dev && !isServer) {
       // Remove unused CSS
