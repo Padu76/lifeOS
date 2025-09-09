@@ -28,7 +28,9 @@
     "@supabase/auth-helpers-react": "^0.4.2",
     "@lifeos/core": "file:../../packages/core",
     "@lifeos/types": "file:../../packages/types",
-    "@lifeos/ui": "file:../../packages/ui"
+    "@lifeos/ui": "file:../../packages/ui",
+    "howler": "^2.2.4",
+    "@types/howler": "^2.2.11"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
