@@ -117,12 +117,20 @@ const nextConfig = {
     ];
   },
 
-  // Rewrites per dynamic routes
+  // Rewrites per dynamic routes - FIXED to handle undefined env variable
   async rewrites() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    
+    // Only add rewrites if Supabase URL is defined
+    if (!supabaseUrl) {
+      console.warn('NEXT_PUBLIC_SUPABASE_URL not defined - skipping API rewrites');
+      return [];
+    }
+    
     return [
       {
         source: '/api/v1/:path*',
-        destination: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/:path*`,
+        destination: `${supabaseUrl}/functions/v1/:path*`,
       },
     ];
   },
