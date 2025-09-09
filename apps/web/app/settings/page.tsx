@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  User, Settings, Bell, Shield, Brain, Palette, Moon, Sun, 
+  User, Settings as SettingsIcon, Bell, Shield, Brain, Palette, Moon, Sun,
   Globe, Clock, Target, Heart, Save, RefreshCw, LogOut, Trash2 
 } from 'lucide-react';
 import { supabase, callEdgeFunction, getCurrentUser } from '../../lib/supabase';
