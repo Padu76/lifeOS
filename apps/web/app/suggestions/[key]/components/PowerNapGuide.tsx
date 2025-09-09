@@ -11,6 +11,12 @@ export const PowerNapGuide: React.FC = () => {
   const [ambientSound, setAmbientSound] = useState('rain');
   const [customTime, setCustomTime] = useState(15);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Oscillatori per suoni sintetici
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
@@ -20,6 +26,7 @@ export const PowerNapGuide: React.FC = () => {
           if (time <= 1) {
             setIsActive(false);
             setPhase('wakeup');
+            stopAmbientSound();
             playWakeupSound();
             return 0;
           }
@@ -36,6 +43,7 @@ export const PowerNapGuide: React.FC = () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      stopAmbientSound();
     };
   }, [isActive, timeLeft]);
 
@@ -45,73 +53,185 @@ export const PowerNapGuide: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const initAudioContext = () => {
+    if (!audioContextRef.current) {
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      } catch (error) {
+        console.warn('Web Audio API not supported');
+      }
+    }
+  };
+
+  const createOscillatorSound = (frequency: number, type: OscillatorType = 'sine', volume: number = 0.1) => {
+    if (!audioContextRef.current) return;
+
+    const oscillator = audioContextRef.current.createOscillator();
+    const gainNode = audioContextRef.current.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContextRef.current.destination);
+    
+    oscillator.frequency.setValueAtTime(frequency, audioContextRef.current.currentTime);
+    oscillator.type = type;
+    gainNode.gain.setValueAtTime(volume, audioContextRef.current.currentTime);
+    
+    return { oscillator, gainNode };
+  };
+
+  const playAmbientSound = () => {
+    if (!soundEnabled) return;
+    
+    initAudioContext();
+    stopAmbientSound();
+
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+
+    try {
+      // Suoni sintetici con Web Audio API
+      if (audioContextRef.current) {
+        let sound;
+        
+        switch (ambientSound) {
+          case 'rain':
+            // Suono di pioggia: rumore bianco filtrato
+            sound = createOscillatorSound(200, 'sawtooth', 0.05);
+            if (sound) {
+              oscillatorRef.current = sound.oscillator;
+              gainNodeRef.current = sound.gainNode;
+              // Aggiunge variazione casuale per simulare pioggia
+              setInterval(() => {
+                if (gainNodeRef.current && audioContextRef.current) {
+                  const randomVolume = 0.03 + Math.random() * 0.04;
+                  gainNodeRef.current.gain.setValueAtTime(randomVolume, audioContextRef.current.currentTime);
+                }
+              }, 500);
+              sound.oscillator.start();
+            }
+            break;
+            
+          case 'ocean':
+            // Suono oceano: frequenza bassa ondulante
+            sound = createOscillatorSound(80, 'sine', 0.08);
+            if (sound) {
+              oscillatorRef.current = sound.oscillator;
+              gainNodeRef.current = sound.gainNode;
+              // Oscillazione per simulare onde
+              sound.oscillator.frequency.setValueAtTime(80, audioContextRef.current.currentTime);
+              sound.oscillator.frequency.linearRampToValueAtTime(120, audioContextRef.current.currentTime + 3);
+              sound.oscillator.frequency.linearRampToValueAtTime(80, audioContextRef.current.currentTime + 6);
+              sound.oscillator.start();
+            }
+            break;
+            
+          case 'forest':
+            // Suono foresta: frequenze medie con variazioni
+            sound = createOscillatorSound(150, 'triangle', 0.06);
+            if (sound) {
+              oscillatorRef.current = sound.oscillator;
+              gainNodeRef.current = sound.gainNode;
+              sound.oscillator.start();
+            }
+            break;
+            
+          case 'silence':
+            // Nessun suono
+            break;
+        }
+      }
+    } catch (error) {
+      console.warn('Error playing ambient sound:', error);
+    }
+  };
+
+  const stopAmbientSound = () => {
+    try {
+      if (oscillatorRef.current) {
+        oscillatorRef.current.stop();
+        oscillatorRef.current = null;
+      }
+      if (gainNodeRef.current) {
+        gainNodeRef.current = null;
+      }
+      if (ambientAudioRef.current) {
+        ambientAudioRef.current.pause();
+        ambientAudioRef.current.currentTime = 0;
+      }
+    } catch (error) {
+      console.warn('Error stopping ambient sound:', error);
+    }
+  };
+
+  const playWakeupSound = () => {
+    if (!soundEnabled) return;
+    
+    initAudioContext();
+    
+    try {
+      if (audioContextRef.current) {
+        // Suono dolce di campanella per il risveglio
+        const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 (accordo maggiore)
+        
+        frequencies.forEach((freq, index) => {
+          setTimeout(() => {
+            const sound = createOscillatorSound(freq, 'sine', 0.2);
+            if (sound) {
+              sound.gainNode.gain.exponentialRampToValueAtTime(0.01, audioContextRef.current!.currentTime + 1.5);
+              sound.oscillator.start();
+              sound.oscillator.stop(audioContextRef.current!.currentTime + 2);
+            }
+          }, index * 300);
+        });
+      }
+    } catch (error) {
+      console.warn('Error playing wakeup sound:', error);
+    }
+  };
+
   const startTimer = () => {
     setTimeLeft(customTime * 60);
     setIsActive(true);
     setPhase('timer');
     if (soundEnabled) {
-      playAmbientSound();
+      // Piccolo delay per permettere user interaction prima di avviare audio
+      setTimeout(() => {
+        playAmbientSound();
+      }, 100);
     }
   };
 
   const pauseTimer = () => {
     setIsActive(!isActive);
+    if (isActive) {
+      stopAmbientSound();
+    } else if (soundEnabled) {
+      playAmbientSound();
+    }
   };
 
   const resetTimer = () => {
     setIsActive(false);
     setTimeLeft(customTime * 60);
     setPhase('preparation');
-  };
-
-  const playAmbientSound = () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    
-    // Simulazione suono ambientale con oscillatore
-    const oscillator = audioContextRef.current.createOscillator();
-    const gainNode = audioContextRef.current.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContextRef.current.destination);
-    
-    // Frequenze per diversi suoni ambientali
-    const frequencies = {
-      rain: 150,
-      ocean: 80,
-      forest: 200,
-      silence: 0
-    };
-    
-    oscillator.frequency.setValueAtTime(frequencies[ambientSound as keyof typeof frequencies], audioContextRef.current.currentTime);
-    gainNode.gain.setValueAtTime(0.1, audioContextRef.current.currentTime);
-    
-    oscillator.start();
-    setTimeout(() => oscillator.stop(), 1000);
-  };
-
-  const playWakeupSound = () => {
-    if (!soundEnabled || !audioContextRef.current) return;
-    
-    // Suono dolce di risveglio
-    const oscillator = audioContextRef.current.createOscillator();
-    const gainNode = audioContextRef.current.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContextRef.current.destination);
-    
-    oscillator.frequency.setValueAtTime(523.25, audioContextRef.current.currentTime); // C5
-    gainNode.gain.setValueAtTime(0.3, audioContextRef.current.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContextRef.current.currentTime + 2);
-    
-    oscillator.start();
-    oscillator.stop(audioContextRef.current.currentTime + 2);
+    stopAmbientSound();
   };
 
   const completeSession = () => {
     setPhase('completed');
+    stopAmbientSound();
   };
+
+  // Cleanup quando il componente viene smontato
+  useEffect(() => {
+    return () => {
+      stopAmbientSound();
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
   if (phase === 'preparation') {
     return (
@@ -152,10 +272,10 @@ export const PowerNapGuide: React.FC = () => {
                 <label className="block text-white font-medium mb-3">Suono ambientale</label>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { key: 'rain', label: 'Pioggia', icon: '🌧️' },
-                    { key: 'ocean', label: 'Oceano', icon: '🌊' },
-                    { key: 'forest', label: 'Foresta', icon: '🌲' },
-                    { key: 'silence', label: 'Silenzio', icon: '🤫' }
+                    { key: 'rain', label: 'Pioggia', icon: '🌧️', desc: 'Suono rilassante di pioggia' },
+                    { key: 'ocean', label: 'Oceano', icon: '🌊', desc: 'Onde che si infrangono' },
+                    { key: 'forest', label: 'Foresta', icon: '🌲', desc: 'Suoni della natura' },
+                    { key: 'silence', label: 'Silenzio', icon: '🤫', desc: 'Nessun suono' }
                   ].map(sound => (
                     <button
                       key={sound.key}
@@ -165,9 +285,13 @@ export const PowerNapGuide: React.FC = () => {
                           ? 'bg-purple-500/30 text-purple-200 border border-purple-400/50'
                           : 'bg-white/10 text-white/70 border border-white/20 hover:bg-white/20'
                       }`}
+                      title={sound.desc}
                     >
                       <span className="text-xl">{sound.icon}</span>
-                      {sound.label}
+                      <div className="text-left">
+                        <div className="font-medium">{sound.label}</div>
+                        <div className="text-xs opacity-70">{sound.desc}</div>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -188,6 +312,25 @@ export const PowerNapGuide: React.FC = () => {
                   {soundEnabled ? 'Attivo' : 'Disattivo'}
                 </button>
               </div>
+
+              {/* Audio test */}
+              {soundEnabled && ambientSound !== 'silence' && (
+                <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-200 text-sm">Prova il suono selezionato:</span>
+                    <button
+                      onClick={() => {
+                        stopAmbientSound();
+                        setTimeout(() => playAmbientSound(), 100);
+                        setTimeout(() => stopAmbientSound(), 3000);
+                      }}
+                      className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded text-sm hover:bg-blue-500/30 transition-colors"
+                    >
+                      Test Audio
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Tips */}
               <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-4">
@@ -224,6 +367,13 @@ export const PowerNapGuide: React.FC = () => {
             <div className="text-6xl mb-4">😴</div>
             <h1 className="text-3xl font-bold text-white mb-2">Riposa e Ricaricati</h1>
             <p className="text-white/60">Chiudi gli occhi e lascia che il corpo si rigeneri</p>
+            {soundEnabled && ambientSound !== 'silence' && (
+              <p className="text-white/50 text-sm mt-2">
+                🎵 {ambientSound === 'rain' ? 'Pioggia rilassante' : 
+                     ambientSound === 'ocean' ? 'Suoni dell\'oceano' : 
+                     'Suoni della foresta'} in riproduzione
+              </p>
+            )}
           </div>
 
           {/* Timer grande */}
@@ -270,6 +420,7 @@ export const PowerNapGuide: React.FC = () => {
             <button
               onClick={pauseTimer}
               className="bg-white/10 hover:bg-white/20 text-white p-4 rounded-full transition-all border border-white/20"
+              title={isActive ? 'Pausa' : 'Riprendi'}
             >
               {isActive ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
             </button>
@@ -277,8 +428,17 @@ export const PowerNapGuide: React.FC = () => {
             <button
               onClick={resetTimer}
               className="bg-white/10 hover:bg-white/20 text-white p-4 rounded-full transition-all border border-white/20"
+              title="Ricomincia"
             >
               <RotateCcw className="w-6 h-6" />
+            </button>
+
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="bg-white/10 hover:bg-white/20 text-white p-4 rounded-full transition-all border border-white/20"
+              title={soundEnabled ? 'Disattiva audio' : 'Attiva audio'}
+            >
+              {soundEnabled ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
             </button>
           </div>
 
