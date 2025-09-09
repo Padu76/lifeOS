@@ -2,7 +2,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { ComponentProps } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 // Loading fallback component
 const LoadingSpinner = () => (
@@ -19,118 +19,11 @@ const LoadingCard = () => (
   </div>
 );
 
-// 1. MicroAdviceWidget - Heavy AI component
+// 1. MicroAdviceWidget - Heavy AI component (exists in LifeOS)
 export const LazyMicroAdviceWidget = dynamic(
   () => import('./MicroAdviceWidget'),
   {
     loading: () => <LoadingCard />,
-    ssr: false, // Disable SSR for this component
-  }
-);
-
-// 2. Charts - Heavy recharts dependency
-export const LazyLineChart = dynamic(
-  () => import('recharts').then(mod => ({ default: mod.LineChart })),
-  {
-    loading: () => <LoadingSpinner />,
-    ssr: false,
-  }
-);
-
-export const LazyAreaChart = dynamic(
-  () => import('recharts').then(mod => ({ default: mod.AreaChart })),
-  {
-    loading: () => <LoadingSpinner />,
-    ssr: false,
-  }
-);
-
-export const LazyBarChart = dynamic(
-  () => import('recharts').then(mod => ({ default: mod.BarChart })),
-  {
-    loading: () => <LoadingSpinner />,
-    ssr: false,
-  }
-);
-
-// 3. Heavy dashboard components
-export const LazyLifeScoreRing = dynamic(
-  () => import('./dashboard/LifeScoreRing'),
-  {
-    loading: () => (
-      <div className="w-20 h-20 sm:w-32 sm:h-32 lg:w-40 lg:h-40 bg-white/10 rounded-full animate-pulse"></div>
-    ),
-    ssr: false,
-  }
-);
-
-export const LazyMetricCard = dynamic(
-  () => import('./dashboard/MetricCard'),
-  {
-    loading: () => <LoadingCard />,
-    ssr: false,
-  }
-);
-
-// 4. Settings forms - Heavy form components
-export const LazySettingsForm = dynamic(
-  () => import('./settings/SettingsForm'),
-  {
-    loading: () => <LoadingCard />,
-    ssr: false,
-  }
-);
-
-// 5. Suggestion components
-export const LazySuggestionCard = dynamic(
-  () => import('./suggestions/SuggestionCard'),
-  {
-    loading: () => <LoadingCard />,
-    ssr: false,
-  }
-);
-
-// 6. Audio components - Heavy howler.js dependency
-export const LazyAudioPlayer = dynamic(
-  () => import('./audio/AudioPlayer'),
-  {
-    loading: () => <LoadingSpinner />,
-    ssr: false,
-  }
-);
-
-// 7. Complex animations
-export const LazyAnimatedBackground = dynamic(
-  () => import('./ui/AnimatedBackground'),
-  {
-    loading: () => null, // No loading state for background
-    ssr: false,
-  }
-);
-
-// 8. Modal components - Not needed until user interaction
-export const LazyModal = dynamic(
-  () => import('./ui/Modal'),
-  {
-    loading: () => null,
-    ssr: false,
-  }
-);
-
-// 9. Calendar/date components - Heavy date-fns dependency
-export const LazyDatePicker = dynamic(
-  () => import('./ui/DatePicker'),
-  {
-    loading: () => <LoadingSpinner />,
-    ssr: false,
-  }
-);
-
-// 10. Image optimization components
-export const LazyImageGallery = dynamic(
-  () => import('./ui/ImageGallery'),
-  {
-    loading: () => <LoadingSpinner />,
     ssr: false,
   }
 );
