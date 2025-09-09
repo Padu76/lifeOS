@@ -111,9 +111,9 @@ const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
 
 // Mobile Tab Selector Component
 const MobileTabSelector: React.FC<{
-  tabs: readonly { id: string; label: string; icon: React.ComponentType<any> }[];
-  activeTab: string;
-  onTabChange: (tab: string) => void;
+  tabs: readonly { id: 'profile' | 'notifications' | 'ai' | 'privacy' | 'theme'; label: string; icon: React.ComponentType<any> }[];
+  activeTab: 'profile' | 'notifications' | 'ai' | 'privacy' | 'theme';
+  onTabChange: (tab: 'profile' | 'notifications' | 'ai' | 'privacy' | 'theme') => void;
 }> = ({ tabs, activeTab, onTabChange }) => {
   return (
     <div className="lg:hidden mb-6">
