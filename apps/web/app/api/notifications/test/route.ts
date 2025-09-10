@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentPushSystem, EmpatheticLanguageEngine } from '@lifeos/core';
+import { IntelligentPushSystem } from '@lifeos/core/advice/intelligentPushSystem';
+import { EmpatheticLanguageEngine } from '@lifeos/core/advice/empatheticLanguageEngine';
 import { createClient } from '@supabase/supabase-js';
 
 interface TestNotificationRequest {
