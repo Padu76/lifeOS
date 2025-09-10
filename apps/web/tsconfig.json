@@ -17,6 +17,26 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./app/*", "./components/*", "./lib/*"],
+      "@lifeos/core": ["../../packages/core"],
+      "@lifeos/core/*": ["../../packages/core/*"],
+      "@lifeos/types": ["../../packages/types"],
+      "@lifeos/types/*": ["../../packages/types/*"],
+      "@lifeos/ui": ["../../packages/ui"],
+      "@lifeos/ui/*": ["../../packages/ui/*"],
+      "@lifeos/analytics": ["../../packages/analytics"],
+      "@lifeos/analytics/*": ["../../packages/analytics/*"],
+      "@lifeos/dashboard": ["../../packages/dashboard"],
+      "@lifeos/dashboard/*": ["../../packages/dashboard/*"],
+      "@lifeos/onboarding": ["../../packages/onboarding"],
+      "@lifeos/onboarding/*": ["../../packages/onboarding/*"],
+      "@lifeos/screens": ["../../packages/screens"],
+      "@lifeos/screens/*": ["../../packages/screens/*"],
+      "@lifeos/shared": ["../../packages/shared"],
+      "@lifeos/shared/*": ["../../packages/shared/*"]
+    },
     "plugins": [
       {
         "name": "next"
