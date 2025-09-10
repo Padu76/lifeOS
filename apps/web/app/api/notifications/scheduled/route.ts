@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentPushSystem, IntelligentTimingSystem } from '../../../../packages/core';
+import { IntelligentPushSystem, IntelligentTimingSystem } from '@lifeos/core';
 import { createClient } from '@supabase/supabase-js';
 
 interface ScheduledNotificationResponse {
@@ -279,7 +279,6 @@ async function scheduleIntelligentNotification(userId: string, params: any): Pro
 
   // Initialize intelligent systems
   const pushSystem = new IntelligentPushSystem();
-  const timingSystem = new IntelligentTimingSystem();
 
   // Prepare default data if missing
   const defaultMetrics = recentMetrics?.[0] || getDefaultMetrics();
