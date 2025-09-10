@@ -13,38 +13,16 @@ export { useUserPreferences } from './useUserPreferences';
 export { useSystemAnalytics } from './useSystemAnalytics';
 export { useUserInitialization } from './useUserInitialization';
 
-// Re-export types for convenience
+// Re-export types for convenience - NO DUPLICATES
 export type {
-  // From useMicroAdvice
+  // From useMicroAdvice only
   HealthMetrics,
   LifeScoreV2,
-  MicroAdvice,
-  
-  // From useWellnessDashboard
-  WellnessDashboard,
-  TodayStats,
-  RecentActivity,
-  Achievement,
-  
-  // From useUserPreferences
-  UserPreferences,
-  QuietHours,
-  NotificationSettings,
-  
-  // From useSystemAnalytics
-  SystemAnalytics,
-  TimeRange,
-  MetricTrend,
-  CategoryInsight,
-  PatternInsight,
-  
-  // From useUserInitialization
-  OnboardingAnswers,
-  InitializationResult,
-  InitializationProgress
+  MicroAdvice
 } from './useMicroAdvice';
 
 export type {
+  // From useWellnessDashboard
   WellnessDashboard,
   TodayStats,
   RecentActivity,
@@ -52,6 +30,7 @@ export type {
 } from './useWellnessDashboard';
 
 export type {
+  // From useUserPreferences
   UserPreferences,
   QuietHours,
   NotificationSettings,
@@ -59,6 +38,7 @@ export type {
 } from './useUserPreferences';
 
 export type {
+  // From useSystemAnalytics
   SystemAnalytics,
   TimeRange,
   MetricTrend,
@@ -68,6 +48,7 @@ export type {
 } from './useSystemAnalytics';
 
 export type {
+  // From useUserInitialization
   OnboardingAnswers,
   InitializationResult,
   InitializationProgress
