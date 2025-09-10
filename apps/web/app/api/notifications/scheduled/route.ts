@@ -85,7 +85,8 @@ export async function GET(request: NextRequest) {
     console.error('Error in scheduled notifications API:', error);
     return NextResponse.json({
       error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? 
+        (error instanceof Error ? error.message : String(error)) : undefined
     }, { status: 500 });
   }
 }
