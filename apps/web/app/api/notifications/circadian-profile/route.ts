@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentTimingSystem } from '@/packages/core/advice/intelligentTimingSystem';
+import { IntelligentTimingSystem } from '../../../../packages/core';
 import { createClient } from '@supabase/supabase-js';
 
 // Types from existing system
