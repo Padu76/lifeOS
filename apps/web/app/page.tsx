@@ -3,6 +3,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Brain, Heart, Moon, TrendingUp, Zap, Star, Users, Shield, Play, CheckCircle, ArrowRight, BarChart3, Clock, Target, Menu, X } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../lib/supabase';
 
 // SSR-safe scroll position hook
 const useScrollPosition = () => {
@@ -48,8 +50,65 @@ const useIntersectionObserver = (ref: React.RefObject<HTMLElement>, threshold = 
   return isIntersecting;
 };
 
+// Auth hook
+const useAuth = () => {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    let alive = true;
+    
+    const initializeAuth = async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (alive) {
+          setUser(data.user);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        if (alive) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    initializeAuth();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (alive) {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    });
+    
+    return () => { 
+      alive = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push('/sign-in');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  return { user, loading, logout };
+};
+
 // Mobile Menu Component
-const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void; user: any; loading: boolean; onLogout: () => void }> = ({ 
+  isOpen, 
+  onClose, 
+  user, 
+  loading, 
+  onLogout 
+}) => {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -95,13 +154,39 @@ const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
           ))}
           
           <div className="pt-6 border-t border-white/20">
-            <Link
-              href="/sign-in"
-              onClick={onClose}
-              className="block w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-4 rounded-xl font-bold text-lg text-center hover:scale-105 transition-transform"
-            >
-              Inizia Gratis
-            </Link>
+            {loading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              </div>
+            ) : user ? (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div className="text-white text-lg font-medium">
+                    {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utente'}
+                  </div>
+                  <div className="text-white/60 text-sm">
+                    {user.email}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    onLogout();
+                    onClose();
+                  }}
+                  className="block w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 rounded-xl font-bold text-lg text-center hover:scale-105 transition-transform"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/sign-in"
+                onClick={onClose}
+                className="block w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-4 rounded-xl font-bold text-lg text-center hover:scale-105 transition-transform"
+              >
+                Inizia Gratis
+              </Link>
+            )}
           </div>
         </nav>
       </div>
@@ -334,6 +419,7 @@ const TestimonialCard: React.FC<{
 
 const HomePage: React.FC = () => {
   const { y: scrollY } = useScrollPosition();
+  const { user, loading, logout } = useAuth();
   const heroRef = useRef<HTMLDivElement>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
@@ -404,7 +490,13 @@ const HomePage: React.FC = () => {
       )}
 
       {/* Mobile Menu */}
-      <MobileMenu isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+      <MobileMenu 
+        isOpen={mobileMenuOpen} 
+        onClose={() => setMobileMenuOpen(false)}
+        user={user}
+        loading={loading}
+        onLogout={logout}
+      />
 
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-40 bg-black/20 backdrop-blur-lg border-b border-white/10">
@@ -422,10 +514,33 @@ const HomePage: React.FC = () => {
               <Link href="/settings" className="hover:text-white transition-colors">Settings</Link>
             </div>
             
-            {/* Desktop CTA */}
-            <Link href="/sign-in" className="hidden md:block bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
-              Inizia Gratis
-            </Link>
+            {/* Desktop Auth Section */}
+            <div className="hidden md:flex items-center gap-4">
+              {loading ? (
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : user ? (
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-white text-sm font-medium">
+                      {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utente'}
+                    </div>
+                    <div className="text-white/60 text-xs">
+                      {user.email}
+                    </div>
+                  </div>
+                  <button 
+                    onClick={logout}
+                    className="bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg font-medium hover:scale-105 transition-transform"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <Link href="/sign-in" className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+                  Inizia Gratis
+                </Link>
+              )}
+            </div>
             
             {/* Mobile Menu Button */}
             <button 
