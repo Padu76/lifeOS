@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentTimingSystem } from '@lifeos/core';
+import { IntelligentTimingSystem } from '@lifeos/core/advice/intelligentTimingSystem';
 import { createClient } from '@supabase/supabase-js';
 
 // Types from existing system
