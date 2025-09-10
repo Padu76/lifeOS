@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { EmpatheticLanguageEngine } from '@lifeos/core';
+import { EmpatheticLanguageEngine } from '@lifeos/core/advice/empatheticLanguageEngine';
 import { createClient } from '@supabase/supabase-js';
 
 interface EmotionalStateResponse {
