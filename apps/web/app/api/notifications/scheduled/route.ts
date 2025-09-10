@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentPushSystem, IntelligentTimingSystem } from '@lifeos/core';
+import { IntelligentPushSystem } from '@lifeos/core/advice/intelligentPushSystem';
+import { IntelligentTimingSystem } from '@lifeos/core/advice/intelligentTimingSystem';
 import { createClient } from '@supabase/supabase-js';
 
 interface ScheduledNotificationResponse {
