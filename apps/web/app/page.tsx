@@ -439,13 +439,13 @@ const HomePage: React.FC = () => {
   }, []);
 
   // Only apply transforms after mount to avoid hydration mismatch
-  const heroTransform = mounted ? `translateY(${scrollY * 0.5}px)` : 'translateY(0px)';
-  const bgTransform = mounted ? `translateY(${scrollY * 0.3}px)` : 'translateY(0px)';
+  const heroTransform = mounted ? `translateY(${scrollY * 0.3}px)` : 'translateY(0px)';
+  const bgTransform = mounted ? `translateY(${scrollY * 0.2}px)` : 'translateY(0px)';
   const mouseParallaxX = mounted && typeof window !== 'undefined' 
-    ? (mousePosition.x - window.innerWidth / 2) * 0.01 
+    ? (mousePosition.x - window.innerWidth / 2) * 0.005 
     : 0;
   const mouseParallaxY = mounted && typeof window !== 'undefined'
-    ? (mousePosition.y - window.innerHeight / 2) * 0.01 
+    ? (mousePosition.y - window.innerHeight / 2) * 0.005 
     : 0;
 
   return (
@@ -554,79 +554,79 @@ const HomePage: React.FC = () => {
         </div>
       </nav>
 
-      {/* Hero Section */}
+      {/* Hero Section - COMPATTO */}
       <section 
         ref={heroRef}
-        className="relative min-h-screen flex items-center justify-center text-center px-4 sm:px-6"
+        className="relative pt-24 pb-16 sm:pt-32 sm:pb-20 flex items-center justify-center text-center px-4 sm:px-6"
         style={{ transform: heroTransform }}
       >
         <div 
-          className="relative z-10 max-w-7xl mx-auto w-full"
+          className="relative z-10 max-w-6xl mx-auto w-full"
           style={{
             transform: `translate(${mouseParallaxX}px, ${mouseParallaxY}px)`
           }}
         >
-          {/* Enhanced Typography with Mobile Scaling */}
-          <h1 className="font-black text-white mb-6 sm:mb-8 leading-[0.9] tracking-tight">
-            <span className="block font-light text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-white/80 mb-2 sm:mb-4">Il futuro del</span>
-            <span className="block bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent text-4xl sm:text-6xl md:text-7xl lg:text-8xl">
+          {/* Enhanced Typography - PIÙ COMPATTO */}
+          <h1 className="font-black text-white mb-4 sm:mb-6 leading-[0.9] tracking-tight">
+            <span className="block font-light text-xl sm:text-2xl md:text-3xl text-white/80 mb-2">Il futuro del</span>
+            <span className="block bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent text-3xl sm:text-5xl md:text-6xl lg:text-7xl">
               BENESSERE
             </span>
-            <span className="block font-light text-xl sm:text-2xl md:text-3xl lg:text-5xl text-white/80 mt-2 sm:mt-4">è qui</span>
+            <span className="block font-light text-lg sm:text-xl md:text-2xl text-white/80 mt-2">è qui</span>
           </h1>
           
-          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-white/80 mb-8 sm:mb-12 max-w-4xl mx-auto leading-relaxed font-light px-4">
+          <p className="text-sm sm:text-base md:text-lg text-white/80 mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed font-light px-4">
             L'AI coach che trasforma i tuoi dati biometrici in azioni concrete per migliorare 
             <span className="text-white font-medium"> sonno, energia e focus</span> ogni singolo giorno.
           </p>
 
-          {/* Statistics - Mobile Optimized */}
-          <div className="grid grid-cols-3 gap-4 sm:gap-8 mb-12 sm:mb-16 max-w-2xl mx-auto">
+          {/* Statistics - COMPATTO */}
+          <div className="grid grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-10 max-w-xl mx-auto">
             <StatCounter target={87} label="LifeScore Medio" delay={0} />
             <StatCounter target={2400} label="Utenti Attivi" delay={200} />
             <StatCounter target={94} label="% Miglioramento" delay={400} />
           </div>
 
-          {/* CTA Buttons - Mobile Optimized */}
-          <div className="flex flex-col gap-4 sm:gap-6 justify-center items-center mb-12 sm:mb-16 px-4">
+          {/* CTA Buttons - COMPATTO */}
+          <div className="flex flex-col gap-3 sm:gap-4 justify-center items-center mb-8 sm:mb-10 px-4">
             <Link 
               href="/dashboard"
-              className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-full font-bold text-lg sm:text-xl hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl flex items-center gap-3 w-full sm:w-auto justify-center"
+              className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full font-bold text-base sm:text-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl flex items-center gap-2 w-full sm:w-auto justify-center"
             >
-              <Play className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Play className="w-4 h-4 sm:w-5 sm:h-5" />
               <span className="relative z-10">Guarda Demo Live</span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </Link>
             
             <button 
               onClick={() => scrollToSection('features-section')}
-              className="border-2 border-white/30 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-full font-bold text-lg sm:text-xl hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-lg flex items-center gap-3 w-full sm:w-auto justify-center"
+              className="border-2 border-white/30 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full font-bold text-base sm:text-lg hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-lg flex items-center gap-2 w-full sm:w-auto justify-center"
             >
               Scopri Come
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
 
-          {/* Interactive Demo */}
+          {/* Interactive Demo - COMPATTO */}
           <div className="px-4">
             <DashboardPreview />
           </div>
         </div>
 
         {/* Scroll Indicator */}
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
-          <div className="w-1 h-16 bg-gradient-to-b from-white/50 to-transparent rounded-full" />
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 animate-bounce">
+          <div className="w-1 h-12 bg-gradient-to-b from-white/50 to-transparent rounded-full" />
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features-section" className="relative py-16 sm:py-24 lg:py-32 px-4 sm:px-6">
+      <section id="features-section" className="relative py-16 sm:py-20 lg:py-24 px-4 sm:px-6">
         <div className="container mx-auto max-w-7xl">
-          <div className="text-center mb-12 sm:mb-20">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-6">
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">
               Come <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">funziona</span>
             </h2>
-            <p className="text-lg sm:text-xl text-white/70 max-w-3xl mx-auto px-4">
+            <p className="text-base sm:text-lg text-white/70 max-w-3xl mx-auto px-4">
               Quattro pilastri che trasformano i tuoi dati in miglioramenti concreti e misurabili
             </p>
           </div>
@@ -688,13 +688,13 @@ const HomePage: React.FC = () => {
       </section>
 
       {/* Testimonials Section */}
-      <section className="relative py-16 sm:py-24 lg:py-32 px-4 sm:px-6">
+      <section className="relative py-16 sm:py-20 lg:py-24 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
-          <div className="text-center mb-12 sm:mb-20">
+          <div className="text-center mb-12 sm:mb-16">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">
               Risultati <span className="bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">reali</span>
             </h2>
-            <p className="text-lg sm:text-xl text-white/70 px-4">
+            <p className="text-base sm:text-lg text-white/70 px-4">
               Persone vere, miglioramenti misurabili, trasformazioni durature
             </p>
           </div>
@@ -728,22 +728,22 @@ const HomePage: React.FC = () => {
       </section>
 
       {/* Final CTA Section */}
-      <section className="relative py-16 sm:py-24 lg:py-32 px-4 sm:px-6">
+      <section className="relative py-16 sm:py-20 lg:py-24 px-4 sm:px-6">
         <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 sm:mb-8">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-6 sm:mb-8">
             Inizia la tua
             <span className="block bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
               trasformazione
             </span>
           </h2>
           
-          <p className="text-lg sm:text-xl text-white/70 mb-8 sm:mb-12 max-w-2xl mx-auto px-4">
+          <p className="text-base sm:text-lg text-white/70 mb-8 sm:mb-10 max-w-2xl mx-auto px-4">
             Unisciti a 2.400+ persone che hanno già migliorato la loro qualità di vita con LifeOS. 
             Risultati misurabili in 14 giorni o rimborso garantito.
           </p>
 
-          <div className="flex flex-col gap-6 justify-center items-center mb-8 sm:mb-12 px-4">
-            <Link href="/sign-in" className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-10 sm:px-12 py-4 sm:py-5 rounded-full font-bold text-lg sm:text-xl hover:scale-105 transition-all duration-300 shadow-2xl w-full sm:w-auto">
+          <div className="flex flex-col gap-6 justify-center items-center mb-8 sm:mb-10 px-4">
+            <Link href="/sign-in" className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-full font-bold text-lg sm:text-xl hover:scale-105 transition-all duration-300 shadow-2xl w-full sm:w-auto">
               <span className="relative z-10 flex items-center gap-3 justify-center">
                 Inizia Gratis per 30 giorni
                 <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
