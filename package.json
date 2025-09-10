@@ -77,7 +77,7 @@
     "supabase": "^1.110.0",
     "typescript": "^5.0.0",
     "webpack-bundle-analyzer": "^4.9.0"
-  ],
+  },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
