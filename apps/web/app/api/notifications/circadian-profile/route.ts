@@ -131,7 +131,8 @@ export async function GET(request: NextRequest) {
     console.error('Error in circadian profile API:', error);
     return NextResponse.json({
       error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? 
+        (error instanceof Error ? error.message : String(error)) : undefined
     }, { status: 500 });
   }
 }
@@ -168,7 +169,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error in circadian profile POST:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? 
+        (error instanceof Error ? error.message : String(error)) : undefined
+    }, { status: 500 });
   }
 }
 
