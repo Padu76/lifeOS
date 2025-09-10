@@ -124,7 +124,8 @@ export async function POST(request: NextRequest) {
     console.error('Error in test notification API:', error);
     return NextResponse.json({
       error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? 
+        (error instanceof Error ? error.message : String(error)) : undefined
     }, { status: 500 });
   }
 }
