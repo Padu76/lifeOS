@@ -112,13 +112,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const { shouldAnimate, animationClass } = useAnimationOptimization()
   const windowSize = useMemoryOptimization()
 
-<<<<<<< HEAD
   // Check if we're on homepage or dashboard to avoid double header
   const isHomepage = pathname === '/' || pathname === '/dashboard'
-=======
-  // Check if we're on homepage to avoid double header
-  const isHomepage = pathname === '/'
->>>>>>> 1ae5f23faa33e9bcc88d73cbb4379817fcb61e1e
 
   useEffect(() => {
     setMounted(true)
@@ -206,11 +201,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Performance monitoring in development */}
         {process.env.NODE_ENV === 'development' && <PerformanceMonitor />}
         
-<<<<<<< HEAD
         {/* Header - Only show on non-homepage and non-dashboard routes */}
-=======
-        {/* Header - Only show on non-homepage routes */}
->>>>>>> 1ae5f23faa33e9bcc88d73cbb4379817fcb61e1e
         {!isHomepage && (
           <header className="sticky top-0 z-50 bg-black/20 backdrop-blur-optimized border-b border-white/10">
             <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
@@ -229,10 +220,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     { href: '/', label: 'Home' },
                     { href: '/suggestions', label: 'Suggestions' },
                     { href: '/dashboard', label: 'Dashboard' },
-<<<<<<< HEAD
                     { href: '/notifications', label: 'Notifications' },
-=======
->>>>>>> 1ae5f23faa33e9bcc88d73cbb4379817fcb61e1e
                     { href: '/settings', label: 'Settings' }
                   ].map((item) => (
                     <Link 
