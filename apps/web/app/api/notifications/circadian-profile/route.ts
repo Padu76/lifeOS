@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentTimingSystem } from '@lifeos/core/advice/intelligentTimingSystem';
 import { createClient } from '@supabase/supabase-js';
 
 // Types from existing system
@@ -23,13 +22,11 @@ interface CircadianProfileResponse {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user ID from session/auth - replace with your auth system
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Initialize Supabase client
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -83,20 +80,12 @@ export async function GET(request: NextRequest) {
         confidence_score: existingProfile.confidence_score
       };
     } else {
-      // Generate new circadian profile using IntelligentTimingSystem
-      const timingSystem = new IntelligentTimingSystem();
-      
       if (!historicalMetrics || historicalMetrics.length < 7) {
         // Not enough data - return default profile
         circadianProfile = getDefaultCircadianProfile();
       } else {
-        // Analyze circadian patterns
-        const analyzedProfile = timingSystem.analyzeCircadianProfile(
-          historicalMetrics,
-          userProfile
-        );
-
-        // Calculate confidence score based on data quality
+        // Analyze circadian patterns using built-in analysis
+        const analyzedProfile = analyzeCircadianPatterns(historicalMetrics, userProfile);
         const confidenceScore = calculateConfidenceScore(historicalMetrics);
 
         circadianProfile = {
@@ -148,7 +137,6 @@ export async function POST(request: NextRequest) {
     const { force_regenerate } = body;
 
     if (force_regenerate) {
-      // Force regeneration by marking existing profile as outdated
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -179,26 +167,199 @@ export async function POST(request: NextRequest) {
 
 // Helper functions
 async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
-  // Replace with your authentication system
-  // Example using JWT or session
   const authHeader = request.headers.get('authorization');
-  if (!authHeader) {
+  if (!authHeader) return null;
+  
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Auth verification failed:', error);
+      return null;
+    }
+    
+    return user.id;
+  } catch (error) {
+    console.error('Error verifying auth token:', error);
     return null;
+  }
+}
+
+function analyzeCircadianPatterns(metrics: any[], userProfile: any): Omit<CircadianProfileResponse, 'last_updated' | 'confidence_score'> {
+  // Analyze sleep patterns
+  const sleepTimes = metrics
+    .filter(m => m.sleep_time)
+    .map(m => timeToMinutes(m.sleep_time));
+  
+  const wakeTimes = metrics
+    .filter(m => m.wake_time)
+    .map(m => timeToMinutes(m.wake_time));
+
+  // Determine chronotype based on sleep/wake patterns
+  const avgSleepTime = sleepTimes.length > 0 ? 
+    sleepTimes.reduce((sum, time) => sum + time, 0) / sleepTimes.length : 23 * 60;
+  
+  const avgWakeTime = wakeTimes.length > 0 ?
+    wakeTimes.reduce((sum, time) => sum + time, 0) / wakeTimes.length : 7 * 60;
+
+  let chronotype: 'early_bird' | 'night_owl' | 'intermediate';
+  
+  if (avgWakeTime < 6 * 60 && avgSleepTime < 22 * 60) {
+    chronotype = 'early_bird';
+  } else if (avgWakeTime > 8 * 60 && avgSleepTime > 24 * 60) {
+    chronotype = 'night_owl';
+  } else {
+    chronotype = 'intermediate';
   }
 
-  // Extract user ID from auth token
-  // This is a placeholder - implement your auth logic
-  try {
-    // Example: verify JWT token and extract user ID
-    const token = authHeader.replace('Bearer ', '');
-    // const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // return decoded.userId;
+  // Analyze energy patterns
+  const energyByHour: { [hour: number]: number[] } = {};
+  const stressByHour: { [hour: number]: number[] } = {};
+
+  metrics.forEach(metric => {
+    if (metric.energy && metric.timestamp) {
+      const hour = new Date(metric.timestamp).getHours();
+      if (!energyByHour[hour]) energyByHour[hour] = [];
+      energyByHour[hour].push(metric.energy);
+    }
     
-    // For now, return a mock user ID for development
-    return 'user_123'; // Replace with real implementation
-  } catch (error) {
-    return null;
+    if (metric.stress && metric.timestamp) {
+      const hour = new Date(metric.timestamp).getHours();
+      if (!stressByHour[hour]) stressByHour[hour] = [];
+      stressByHour[hour].push(metric.stress);
+    }
+  });
+
+  // Calculate average energy and stress by hour
+  const avgEnergyByHour: { hour: number; energy: number }[] = [];
+  const avgStressByHour: { hour: number; stress: number }[] = [];
+
+  for (let hour = 0; hour < 24; hour++) {
+    if (energyByHour[hour] && energyByHour[hour].length > 0) {
+      const avgEnergy = energyByHour[hour].reduce((sum, e) => sum + e, 0) / energyByHour[hour].length;
+      avgEnergyByHour.push({ hour, energy: avgEnergy });
+    }
+    
+    if (stressByHour[hour] && stressByHour[hour].length > 0) {
+      const avgStress = stressByHour[hour].reduce((sum, s) => sum + s, 0) / stressByHour[hour].length;
+      avgStressByHour.push({ hour, stress: avgStress });
+    }
   }
+
+  // Find peak energy hours (top 20% of hours)
+  const sortedEnergyHours = avgEnergyByHour.sort((a, b) => b.energy - a.energy);
+  const peakEnergyCount = Math.max(1, Math.floor(sortedEnergyHours.length * 0.2));
+  const peak_energy_hours = sortedEnergyHours.slice(0, peakEnergyCount).map(h => h.hour);
+
+  // Find low energy hours (bottom 20% of hours)
+  const lowEnergyCount = Math.max(1, Math.floor(sortedEnergyHours.length * 0.2));
+  const low_energy_hours = sortedEnergyHours.slice(-lowEnergyCount).map(h => h.hour);
+
+  // Find stress peak hours (top 30% of stress)
+  const sortedStressHours = avgStressByHour.sort((a, b) => b.stress - a.stress);
+  const stressPeakCount = Math.max(1, Math.floor(sortedStressHours.length * 0.3));
+  const stress_peak_hours = sortedStressHours.slice(0, stressPeakCount).map(h => h.hour);
+
+  // Generate optimal intervention windows
+  const optimal_intervention_windows = generateOptimalWindows(
+    peak_energy_hours,
+    low_energy_hours,
+    stress_peak_hours,
+    chronotype
+  );
+
+  return {
+    chronotype,
+    natural_wake_time: minutesToTime(avgWakeTime),
+    natural_sleep_time: minutesToTime(avgSleepTime),
+    peak_energy_hours: peak_energy_hours.length > 0 ? peak_energy_hours : [9, 10, 11],
+    low_energy_hours: low_energy_hours.length > 0 ? low_energy_hours : [13, 14, 20, 21],
+    stress_peak_hours: stress_peak_hours.length > 0 ? stress_peak_hours : [11, 17],
+    optimal_intervention_windows
+  };
+}
+
+function generateOptimalWindows(
+  peakEnergyHours: number[],
+  lowEnergyHours: number[],
+  stressPeakHours: number[],
+  chronotype: string
+): Array<{
+  start_hour: number;
+  end_hour: number;
+  effectiveness_score: number;
+  intervention_type: 'stress_relief' | 'energy_boost' | 'mindfulness' | 'celebration';
+  frequency_limit: number;
+}> {
+  const windows = [];
+
+  // Mindfulness window during morning peak energy
+  const morningPeakHours = peakEnergyHours.filter(h => h >= 6 && h <= 12);
+  if (morningPeakHours.length > 0) {
+    const startHour = Math.min(...morningPeakHours);
+    windows.push({
+      start_hour: startHour,
+      end_hour: Math.min(startHour + 2, 12),
+      effectiveness_score: 0.85,
+      intervention_type: 'mindfulness' as const,
+      frequency_limit: 1
+    });
+  }
+
+  // Energy boost during low energy periods
+  const afternoonLowHours = lowEnergyHours.filter(h => h >= 12 && h <= 17);
+  if (afternoonLowHours.length > 0) {
+    const startHour = Math.min(...afternoonLowHours);
+    windows.push({
+      start_hour: startHour,
+      end_hour: Math.min(startHour + 2, 17),
+      effectiveness_score: 0.78,
+      intervention_type: 'energy_boost' as const,
+      frequency_limit: 1
+    });
+  }
+
+  // Stress relief during stress peak hours
+  const eveningStressHours = stressPeakHours.filter(h => h >= 15 && h <= 20);
+  if (eveningStressHours.length > 0) {
+    const startHour = Math.min(...eveningStressHours);
+    windows.push({
+      start_hour: startHour,
+      end_hour: Math.min(startHour + 3, 20),
+      effectiveness_score: 0.92,
+      intervention_type: 'stress_relief' as const,
+      frequency_limit: 2
+    });
+  }
+
+  // Default windows if no data-driven windows found
+  if (windows.length === 0) {
+    windows.push(
+      {
+        start_hour: 9,
+        end_hour: 11,
+        effectiveness_score: 0.7,
+        intervention_type: 'mindfulness' as const,
+        frequency_limit: 1
+      },
+      {
+        start_hour: 15,
+        end_hour: 17,
+        effectiveness_score: 0.8,
+        intervention_type: 'energy_boost' as const,
+        frequency_limit: 1
+      }
+    );
+  }
+
+  return windows;
 }
 
 function shouldRegenerateProfile(lastUpdated: string): boolean {
@@ -206,7 +367,6 @@ function shouldRegenerateProfile(lastUpdated: string): boolean {
   const now = new Date();
   const daysDiff = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60 * 60 * 24);
   
-  // Regenerate if older than 7 days
   return daysDiff > 7;
 }
 
@@ -235,7 +395,7 @@ function getDefaultCircadianProfile(): CircadianProfileResponse {
       }
     ],
     last_updated: new Date().toISOString(),
-    confidence_score: 0.3 // Low confidence for default profile
+    confidence_score: 0.3
   };
 }
 
@@ -246,33 +406,25 @@ function calculateConfidenceScore(metrics: any[]): number {
   const consistencyScore = calculateDataConsistency(metrics);
   const recencyScore = calculateDataRecency(metrics);
   
-  // Combine factors for overall confidence
   let confidence = 0;
   
-  // Data quantity (more data = higher confidence)
-  confidence += Math.min(dataPoints / 30, 1) * 0.4; // 30 days = max points
-  
-  // Data consistency (less variance = higher confidence)
+  confidence += Math.min(dataPoints / 30, 1) * 0.4;
   confidence += consistencyScore * 0.3;
-  
-  // Data recency (recent data = higher confidence)
   confidence += recencyScore * 0.3;
   
   return Math.min(confidence, 1);
 }
 
 function calculateDataConsistency(metrics: any[]): number {
-  // Calculate variance in sleep/wake times
-  // Lower variance = higher consistency = higher score
   const sleepTimes = metrics
     .map(m => m.sleep_time)
     .filter(Boolean)
     .map(time => timeToMinutes(time));
   
-  if (sleepTimes.length < 7) return 0.5; // Medium confidence for small samples
+  if (sleepTimes.length < 7) return 0.5;
   
   const variance = calculateVariance(sleepTimes);
-  const maxVariance = 120; // 2 hours in minutes
+  const maxVariance = 120;
   
   return Math.max(0, 1 - (variance / maxVariance));
 }
@@ -283,13 +435,18 @@ function calculateDataRecency(metrics: any[]): number {
   const mostRecentDate = new Date(Math.max(...metrics.map(m => new Date(m.date || m.timestamp).getTime())));
   const daysSinceLastData = (Date.now() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24);
   
-  // Higher score for more recent data
-  return Math.max(0, 1 - (daysSinceLastData / 7)); // 7 days = 0 score
+  return Math.max(0, 1 - (daysSinceLastData / 7));
 }
 
 function timeToMinutes(timeStr: string): number {
   const [hours, minutes] = timeStr.split(':').map(Number);
   return hours * 60 + minutes;
+}
+
+function minutesToTime(minutes: number): string {
+  const hours = Math.floor(minutes / 60) % 24;
+  const mins = Math.floor(minutes % 60);
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 }
 
 function calculateVariance(numbers: number[]): number {

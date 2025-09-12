@@ -3,7 +3,7 @@ import './globals.css'
 import '../styles/performance.css'
 import Link from 'next/link'
 import { useEffect, useState, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 
 // Animation optimization hook (moved from LazyComponents to avoid import issues)
@@ -103,6 +103,7 @@ const PageLoading = () => (
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
@@ -110,6 +111,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // Performance optimizations
   const { shouldAnimate, animationClass } = useAnimationOptimization()
   const windowSize = useMemoryOptimization()
+
+  // Check if we're on homepage or dashboard to avoid double header
+  const isHomepage = pathname === '/' || pathname === '/dashboard'
 
   useEffect(() => {
     setMounted(true)
@@ -197,72 +201,75 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Performance monitoring in development */}
         {process.env.NODE_ENV === 'development' && <PerformanceMonitor />}
         
-        {/* Modern header with LifeOS design */}
-        <header className="sticky top-0 z-50 bg-black/20 backdrop-blur-optimized border-b border-white/10">
-          <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
-            <div className="flex items-center justify-between">
-              {/* Logo */}
-              <Link 
-                href="/" 
-                className={`text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent hover-optimized ${animationClass}`}
-              >
-                LifeOS
-              </Link>
-              
-              {/* Navigation - Hidden on small screens, handled by individual pages */}
-              <nav className="hidden lg:flex space-x-6 xl:space-x-8">
-                {[
-                  { href: '/', label: 'Home' },
-                  { href: '/suggestions', label: 'Suggestions' },
-                  { href: '/dashboard', label: 'Dashboard' },
-                  { href: '/settings', label: 'Settings' }
-                ].map((item) => (
-                  <Link 
-                    key={item.href}
-                    href={item.href} 
-                    className={`text-white/80 hover:text-white transition-colors ${animationClass}`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-
-              {/* Auth section */}
-              <div className="flex items-center gap-4">
-                {loading ? (
-                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                ) : user ? (
-                  <div className="flex items-center gap-3">
-                    {/* User info - hidden on mobile */}
-                    <div className="hidden sm:block text-right">
-                      <div className="text-white text-sm font-medium">
-                        {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utente'}
-                      </div>
-                      <div className="text-white/60 text-xs">
-                        {user.email}
-                      </div>
-                    </div>
-                    
-                    {/* Logout button */}
-                    <button 
-                      onClick={logout}
-                      className={`bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg font-medium hover:scale-105 transition-transform button-press ${animationClass}`}
+        {/* Header - Only show on non-homepage and non-dashboard routes */}
+        {!isHomepage && (
+          <header className="sticky top-0 z-50 bg-black/20 backdrop-blur-optimized border-b border-white/10">
+            <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
+              <div className="flex items-center justify-between">
+                {/* Logo */}
+                <Link 
+                  href="/" 
+                  className={`text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent hover-optimized ${animationClass}`}
+                >
+                  LifeOS
+                </Link>
+                
+                {/* Navigation - Hidden on small screens, handled by individual pages */}
+                <nav className="hidden lg:flex space-x-6 xl:space-x-8">
+                  {[
+                    { href: '/', label: 'Home' },
+                    { href: '/suggestions', label: 'Suggestions' },
+                    { href: '/dashboard', label: 'Dashboard' },
+                    { href: '/notifications', label: 'Notifications' },
+                    { href: '/settings', label: 'Settings' }
+                  ].map((item) => (
+                    <Link 
+                      key={item.href}
+                      href={item.href} 
+                      className={`text-white/80 hover:text-white transition-colors ${animationClass}`}
                     >
-                      Logout
-                    </button>
-                  </div>
-                ) : (
-                  <Link 
-                    href="/sign-in"
-                    className={`bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 sm:px-6 py-2 rounded-lg font-semibold hover:scale-105 transition-transform button-press ${animationClass}`}
-                  >
-                    Accedi
-                  </Link>
-                )}
+                      {item.label}
+                    </Link>
+                  ))}
+                </nav>
+
+                {/* Auth section */}
+                <div className="flex items-center gap-4">
+                  {loading ? (
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : user ? (
+                    <div className="flex items-center gap-3">
+                      {/* User info - hidden on mobile */}
+                      <div className="hidden sm:block text-right">
+                        <div className="text-white text-sm font-medium">
+                          {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utente'}
+                        </div>
+                        <div className="text-white/60 text-xs">
+                          {user.email}
+                        </div>
+                      </div>
+                      
+                      {/* Logout button */}
+                      <button 
+                        onClick={logout}
+                        className={`bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg font-medium hover:scale-105 transition-transform button-press ${animationClass}`}
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  ) : (
+                    <Link 
+                      href="/sign-in"
+                      className={`bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 sm:px-6 py-2 rounded-lg font-semibold hover:scale-105 transition-transform button-press ${animationClass}`}
+                    >
+                      Accedi
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
+        )}
 
         {/* Main content with performance optimizations */}
         <main className="contain-layout">

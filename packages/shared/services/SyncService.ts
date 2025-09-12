@@ -1,25 +1,7 @@
 // =====================================================
-// LifeOS Cross-Platform Sync Service
+// LifeOS Web-Only Sync Service
 // File: packages/shared/services/SyncService.ts
 // =====================================================
-
-import { Platform } from 'react-native';
-
-// Platform-specific imports
-let AsyncStorage: any;
-let supabase: any;
-
-// Dynamic imports based on platform
-if (Platform.OS === 'ios' || Platform.OS === 'android') {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} else if (typeof window !== 'undefined') {
-  // Web environment
-  try {
-    supabase = require('../../apps/web/lib/supabase').supabase;
-  } catch (e) {
-    console.warn('Web supabase not available');
-  }
-}
 
 // Types
 interface SyncData {
@@ -56,27 +38,17 @@ interface SyncResult {
   errors: string[];
 }
 
-class CrossPlatformSyncService {
+class WebSyncService {
   private isOnline: boolean = true;
   private syncQueue: SyncOperation[] = [];
   private syncInProgress: boolean = false;
   private authToken: string | null = null;
   private userId: string | null = null;
-  private apiBaseUrl: string;
-  private syncIntervalId: NodeJS.Timeout | null = null;
-  private onlineListener: any = null;
+  private apiBaseUrl: string = '/api/notifications';
+  private syncIntervalId: number | null = null;
 
   constructor() {
-    this.apiBaseUrl = this.getApiBaseUrl();
     this.initialize();
-  }
-
-  private getApiBaseUrl(): string {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      return `${process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL}/functions/v1/notifications`;
-    } else {
-      return '/api/notifications';
-    }
   }
 
   async initialize(): Promise<void> {
@@ -93,7 +65,7 @@ class CrossPlatformSyncService {
       // Start periodic sync
       this.startPeriodicSync();
       
-      console.log('Cross-platform sync service initialized');
+      console.log('Web sync service initialized');
     } catch (error) {
       console.error('Failed to initialize sync service:', error);
     }
@@ -101,17 +73,10 @@ class CrossPlatformSyncService {
 
   private async loadStoredCredentials(): Promise<void> {
     try {
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        const [userId, authToken] = await Promise.all([
-          AsyncStorage.getItem('user_id'),
-          AsyncStorage.getItem('auth_token')
-        ]);
-        this.userId = userId;
-        this.authToken = authToken;
-      } else if (supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        this.authToken = session?.access_token || null;
-        this.userId = session?.user?.id || null;
+      // Web-only: use localStorage
+      if (typeof localStorage !== 'undefined') {
+        this.userId = localStorage.getItem('user_id');
+        this.authToken = localStorage.getItem('auth_token');
       }
     } catch (error) {
       console.error('Failed to load stored credentials:', error);
@@ -119,23 +84,7 @@ class CrossPlatformSyncService {
   }
 
   private setupNetworkMonitoring(): void {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      // React Native network monitoring
-      try {
-        const NetInfo = require('@react-native-community/netinfo');
-        this.onlineListener = NetInfo.addEventListener((state: any) => {
-          const wasOnline = this.isOnline;
-          this.isOnline = state.isConnected && state.isInternetReachable;
-          
-          // If came back online, process sync queue
-          if (!wasOnline && this.isOnline) {
-            this.processSyncQueue();
-          }
-        });
-      } catch (error) {
-        console.warn('NetInfo not available, assuming online');
-      }
-    } else {
+    if (typeof window !== 'undefined') {
       // Web network monitoring
       this.isOnline = navigator.onLine;
       window.addEventListener('online', () => {
@@ -150,16 +99,11 @@ class CrossPlatformSyncService {
 
   private async loadSyncQueue(): Promise<void> {
     try {
-      let stored: string | null = null;
-      
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        stored = await AsyncStorage.getItem('sync_queue');
-      } else if (typeof localStorage !== 'undefined') {
-        stored = localStorage.getItem('sync_queue');
-      }
-
-      if (stored) {
-        this.syncQueue = JSON.parse(stored);
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('sync_queue');
+        if (stored) {
+          this.syncQueue = JSON.parse(stored);
+        }
       }
     } catch (error) {
       console.error('Failed to load sync queue:', error);
@@ -169,11 +113,8 @@ class CrossPlatformSyncService {
 
   private async saveSyncQueue(): Promise<void> {
     try {
-      const serialized = JSON.stringify(this.syncQueue);
-      
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        await AsyncStorage.setItem('sync_queue', serialized);
-      } else if (typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
+        const serialized = JSON.stringify(this.syncQueue);
         localStorage.setItem('sync_queue', serialized);
       }
     } catch (error) {
@@ -187,7 +128,7 @@ class CrossPlatformSyncService {
       clearInterval(this.syncIntervalId);
     }
     
-    this.syncIntervalId = setInterval(() => {
+    this.syncIntervalId = window.setInterval(() => {
       if (this.isOnline && !this.syncInProgress) {
         this.fullSync();
       }
@@ -428,14 +369,7 @@ class CrossPlatformSyncService {
     const changes: SyncOperation[] = [];
     
     try {
-      let lastSyncStr: string | null = null;
-      
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        lastSyncStr = await AsyncStorage.getItem('last_sync_timestamp');
-      } else if (typeof localStorage !== 'undefined') {
-        lastSyncStr = localStorage.getItem('last_sync_timestamp');
-      }
-
+      const lastSyncStr = localStorage.getItem('last_sync_timestamp');
       const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
       
       // Check for local changes in preferences
@@ -455,18 +389,8 @@ class CrossPlatformSyncService {
     const changes: SyncOperation[] = [];
     
     try {
-      let prefsStr: string | null = null;
-      let prefsTimestampStr: string | null = null;
-      
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        [prefsStr, prefsTimestampStr] = await Promise.all([
-          AsyncStorage.getItem('notification_preferences'),
-          AsyncStorage.getItem('preferences_last_modified')
-        ]);
-      } else if (typeof localStorage !== 'undefined') {
-        prefsStr = localStorage.getItem('notification_preferences');
-        prefsTimestampStr = localStorage.getItem('preferences_last_modified');
-      }
+      const prefsStr = localStorage.getItem('notification_preferences');
+      const prefsTimestampStr = localStorage.getItem('preferences_last_modified');
 
       if (prefsStr && prefsTimestampStr) {
         const prefsTimestamp = new Date(prefsTimestampStr);
@@ -510,11 +434,8 @@ class CrossPlatformSyncService {
 
   async storeDataLocally(key: string, data: any): Promise<void> {
     try {
-      const serialized = JSON.stringify(data);
-      
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        await AsyncStorage.setItem(key, serialized);
-      } else if (typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
+        const serialized = JSON.stringify(data);
         localStorage.setItem(key, serialized);
       }
     } catch (error) {
@@ -541,12 +462,9 @@ class CrossPlatformSyncService {
   }
 
   async updateLastSyncTimestamp(): Promise<void> {
-    const timestamp = new Date().toISOString();
-    
     try {
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        await AsyncStorage.setItem('last_sync_timestamp', timestamp);
-      } else if (typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
+        const timestamp = new Date().toISOString();
         localStorage.setItem('last_sync_timestamp', timestamp);
       }
     } catch (error) {
@@ -624,10 +542,10 @@ class CrossPlatformSyncService {
     this.userId = userId;
     this.authToken = authToken;
     
-    // Store credentials
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      AsyncStorage.setItem('user_id', userId);
-      AsyncStorage.setItem('auth_token', authToken);
+    // Store credentials in localStorage
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('user_id', userId);
+      localStorage.setItem('auth_token', authToken);
     }
   }
 
@@ -659,11 +577,6 @@ class CrossPlatformSyncService {
       this.syncIntervalId = null;
     }
     
-    if (this.onlineListener) {
-      this.onlineListener();
-      this.onlineListener = null;
-    }
-    
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.processSyncQueue);
       window.removeEventListener('offline', () => this.isOnline = false);
@@ -671,4 +584,4 @@ class CrossPlatformSyncService {
   }
 }
 
-export default new CrossPlatformSyncService();
+export default new WebSyncService();

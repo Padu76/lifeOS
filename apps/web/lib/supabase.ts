@@ -6,7 +6,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    '❌ Variabili ambiente mancanti. Controlla che .env.local contenga NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY'
+    'âŒ Variabili ambiente mancanti. Controlla che .env.local contenga NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY'
   )
 }
 
@@ -19,11 +19,32 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// Helper per chiamare Edge Functions con gestione errori
+// Helper per chiamare Edge Functions con gestione errori e autenticazione
 export const callEdgeFunction = async (functionName: string, payload?: any) => {
   try {
+    console.log(`Calling Edge Function: ${functionName}`)
+    
+    // Ottieni la sessione corrente per il token di autenticazione
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.error('Error getting session:', sessionError)
+      throw new Error('Authentication required')
+    }
+    
+    if (!session) {
+      throw new Error('User not authenticated')
+    }
+    
+    console.log('Session found, making authenticated call...')
+    
+    // Chiama la Edge Function con header di autenticazione esplicito
     const { data, error } = await supabase.functions.invoke(functionName, {
-      body: payload
+      body: payload,
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      }
     })
     
     if (error) {
@@ -31,7 +52,9 @@ export const callEdgeFunction = async (functionName: string, payload?: any) => {
       throw error
     }
     
+    console.log(`Edge Function ${functionName} success:`, data)
     return data
+    
   } catch (error) {
     console.error(`Error calling ${functionName}:`, error)
     throw error

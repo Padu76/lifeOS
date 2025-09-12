@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { EmpatheticLanguageEngine } from '@lifeos/core/advice/empatheticLanguageEngine';
 import { createClient } from '@supabase/supabase-js';
 
 interface EmotionalStateResponse {
@@ -65,15 +64,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 });
     }
 
-    // Initialize empathetic engine
-    const languageEngine = new EmpatheticLanguageEngine();
-
     // Prepare data for analysis
     const currentMetrics = recentMetrics[0] || getDefaultMetrics();
     const lifeScore = latestLifeScore || getDefaultLifeScore();
 
-    // Analyze emotional state
-    const emotionalState = languageEngine.analyzeEmotionalState(lifeScore, currentMetrics);
+    // Analyze emotional state using built-in analysis
+    const emotionalState = analyzeEmotionalState(lifeScore, currentMetrics);
     
     // Calculate trend from recent data
     const trend = calculateEmotionalTrend(recentMetrics);
@@ -131,16 +127,77 @@ export async function GET(request: NextRequest) {
 
 // Helper functions
 async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
-  // Same auth logic as circadian profile
   const authHeader = request.headers.get('authorization');
   if (!authHeader) return null;
   
   try {
     const token = authHeader.replace('Bearer ', '');
-    // Implement your JWT verification here
-    return 'user_123'; // Mock for development
+    
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Auth verification failed:', error);
+      return null;
+    }
+    
+    return user.id;
   } catch (error) {
+    console.error('Error verifying auth token:', error);
     return null;
+  }
+}
+
+function analyzeEmotionalState(
+  lifeScore: any, 
+  currentMetrics: any
+): 'stressed' | 'energetic' | 'tired' | 'balanced' | 'anxious' | 'motivated' {
+  
+  // Extract key metrics
+  const mood = currentMetrics.mood || 5;
+  const stress = currentMetrics.stress || 3;
+  const energy = currentMetrics.energy || 5;
+  const sleepHours = currentMetrics.sleep_hours || 7;
+  const overallScore = lifeScore?.score || 65;
+
+  // Normalize values to 0-1 range for consistent analysis
+  const normalizedMood = mood / 10;
+  const normalizedStress = stress / 10;
+  const normalizedEnergy = energy / 10;
+  const normalizedSleep = Math.min(sleepHours / 8, 1);
+  const normalizedScore = overallScore / 100;
+
+  // Calculate composite indicators
+  const wellbeingScore = (normalizedMood + normalizedEnergy + normalizedSleep + normalizedScore) / 4;
+  const stressLevel = normalizedStress;
+  const energyLevel = normalizedEnergy;
+
+  // Decision logic for emotional state
+  if (stressLevel > 0.7 || (stressLevel > 0.5 && wellbeingScore < 0.4)) {
+    return stress > 7 ? 'anxious' : 'stressed';
+  }
+  
+  if (energyLevel < 0.3 || sleepHours < 5) {
+    return 'tired';
+  }
+  
+  if (energyLevel > 0.8 && wellbeingScore > 0.7) {
+    return mood > 7 ? 'motivated' : 'energetic';
+  }
+  
+  if (wellbeingScore > 0.6 && Math.abs(0.5 - stressLevel) < 0.2) {
+    return 'balanced';
+  }
+  
+  // Default based on overall trend
+  if (wellbeingScore > 0.6) {
+    return energyLevel > 0.6 ? 'energetic' : 'balanced';
+  } else {
+    return stressLevel > 0.6 ? 'stressed' : 'tired';
   }
 }
 
@@ -207,6 +264,26 @@ function identifyEmotionalFactors(currentMetrics: any, lifeScore: any, recentMet
     factors.push('stress_level: normal');
   }
 
+  // Mood factor
+  const mood = currentMetrics.mood || 5;
+  if (mood >= 7) {
+    factors.push('mood_level: positive');
+  } else if (mood <= 3) {
+    factors.push('mood_level: low');
+  } else {
+    factors.push('mood_level: neutral');
+  }
+
+  // Energy factor
+  const energy = currentMetrics.energy || 5;
+  if (energy >= 7) {
+    factors.push('energy_level: high');
+  } else if (energy <= 3) {
+    factors.push('energy_level: low');
+  } else {
+    factors.push('energy_level: moderate');
+  }
+
   // Trend factor
   const trend = calculateEmotionalTrend(recentMetrics);
   factors.push(`recent_trend: ${trend}`);
@@ -223,6 +300,18 @@ function identifyEmotionalFactors(currentMetrics: any, lifeScore: any, recentMet
     factors.push('time_context: evening');
   } else {
     factors.push('time_context: late');
+  }
+
+  // Overall wellness factor
+  const overallScore = lifeScore?.score || 65;
+  if (overallScore >= 80) {
+    factors.push('overall_wellness: excellent');
+  } else if (overallScore >= 60) {
+    factors.push('overall_wellness: good');
+  } else if (overallScore >= 40) {
+    factors.push('overall_wellness: fair');
+  } else {
+    factors.push('overall_wellness: needs_attention');
   }
 
   return factors;
@@ -252,6 +341,14 @@ function calculateAnalysisConfidence(recentMetrics: any[], lifeScore: any): numb
     confidence += 0.1;
   }
 
+  // Data completeness boost
+  if (recentMetrics && recentMetrics.length > 0) {
+    const latestMetrics = recentMetrics[0];
+    const completenessScore = ['mood', 'stress', 'energy', 'sleep_hours', 'steps']
+      .reduce((score, field) => score + (latestMetrics[field] ? 0.02 : 0), 0);
+    confidence += completenessScore;
+  }
+
   return Math.min(confidence, 1);
 }
 
@@ -269,30 +366,38 @@ function generateEmotionalRecommendations(
     case 'anxious':
       immediate.push('Prova 5 minuti di respirazione profonda');
       immediate.push('Fai una breve pausa dalla attività corrente');
+      immediate.push('Ascolta musica rilassante o suoni della natura');
       preventive.push('Pianifica pause regolari durante la giornata');
       preventive.push('Considera tecniche di mindfulness serali');
+      preventive.push('Valuta di ridurre il carico di lavoro se possibile');
       break;
 
     case 'tired':
       immediate.push('Bevi un bicchiere d\'acqua');
       immediate.push('Fai stretching leggero');
+      immediate.push('Esci all\'aria aperta per 5 minuti');
       preventive.push('Ottimizza la routine del sonno');
       preventive.push('Considera un power nap di 20 minuti');
+      preventive.push('Valuta la qualità del sonno notturno');
       break;
 
     case 'energetic':
     case 'motivated':
       immediate.push('Sfrutta questo momento per attività impegnative');
       immediate.push('Considera un workout energizzante');
+      immediate.push('Affronta compiti che rimandi da tempo');
       preventive.push('Programma le attività più difficili in questi momenti');
       preventive.push('Mantieni l\'energia con snack salutari');
+      preventive.push('Documenta cosa contribuisce a questi stati positivi');
       break;
 
     case 'balanced':
       immediate.push('Ottimo momento per pianificare la giornata');
       immediate.push('Continua con le attività routinarie');
+      immediate.push('Dedica tempo a hobby o interessi personali');
       preventive.push('Mantieni le abitudini che ti portano equilibrio');
       preventive.push('Monitora i fattori che contribuiscono al benessere');
+      preventive.push('Usa questo momento per riflettere sui progressi');
       break;
   }
 
@@ -300,8 +405,17 @@ function generateEmotionalRecommendations(
   if (trend === 'declining') {
     preventive.push('Monitora i pattern che potrebbero influenzare il benessere');
     preventive.push('Considera di consultare un professionista se la tendenza persiste');
+    preventive.push('Rivedi le abitudini recenti che potrebbero aver cambiato l\'equilibrio');
   } else if (trend === 'improving') {
     preventive.push('Identifica e mantieni i fattori che stanno contribuendo al miglioramento');
+    preventive.push('Continua con le strategie che stanno funzionando');
+  }
+
+  // Add context-based recommendations
+  const hour = new Date().getHours();
+  if (hour >= 22 || hour <= 6) {
+    immediate.push('Considera di prepararti per il riposo se è tardi');
+    preventive.push('Mantieni una routine di sonno regolare');
   }
 
   return { immediate, preventive };

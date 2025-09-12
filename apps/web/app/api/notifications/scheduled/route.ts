@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentPushSystem } from '@lifeos/core/advice/intelligentPushSystem';
-import { IntelligentTimingSystem } from '@lifeos/core/advice/intelligentTimingSystem';
 import { createClient } from '@supabase/supabase-js';
 
 interface ScheduledNotificationResponse {
@@ -253,9 +251,22 @@ async function getUserIdFromRequest(request: NextRequest): Promise<string | null
   
   try {
     const token = authHeader.replace('Bearer ', '');
-    // Implement your JWT verification here
-    return 'user_123'; // Mock for development
+    
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Auth verification failed:', error);
+      return null;
+    }
+    
+    return user.id;
   } catch (error) {
+    console.error('Error verifying auth token:', error);
     return null;
   }
 }
@@ -281,9 +292,6 @@ async function scheduleIntelligentNotification(userId: string, params: any): Pro
     supabase.from('notification_preferences').select('*').eq('user_id', userId).single()
   ]);
 
-  // Initialize intelligent systems
-  const pushSystem = new IntelligentPushSystem();
-
   // Prepare default data if missing
   const defaultMetrics = recentMetrics?.[0] || getDefaultMetrics();
   const defaultLifeScore = lifeScore || getDefaultLifeScore();
@@ -291,9 +299,8 @@ async function scheduleIntelligentNotification(userId: string, params: any): Pro
   const defaultCircadianProfile = circadianProfile || getDefaultCircadianProfile();
 
   try {
-    // Schedule using intelligent system
-    const result = await pushSystem.scheduleAdviceNotification(
-      userId,
+    // Calculate optimal timing using inline intelligent scheduling
+    const schedulingResult = calculateOptimalSchedulingTime(
       defaultLifeScore,
       defaultMetrics,
       userProfile || {},
@@ -301,16 +308,28 @@ async function scheduleIntelligentNotification(userId: string, params: any): Pro
       defaultCircadianProfile
     );
 
-    // Get the generated notification details from system
+    // Generate contextual message based on current state
+    const contextualMessage = generateContextualMessage(
+      params.type || 'micro_advice',
+      defaultMetrics,
+      defaultLifeScore,
+      schedulingResult.reasoning
+    );
+
     const notificationData = {
-      id: result.notificationId,
+      id: crypto.randomUUID(),
       user_id: userId,
-      scheduled_time: result.scheduledTime.toISOString(),
+      scheduled_time: schedulingResult.scheduledTime.toISOString(),
       type: params.type || 'micro_advice',
-      message: params.message || 'Notifica intelligente programmata',
-      priority: 'normal' as const,
+      message: params.message || contextualMessage,
+      priority: determinePriority(defaultMetrics, defaultLifeScore) as 'low' | 'normal' | 'high' | 'emergency',
       status: 'scheduled' as const,
-      confidence_score: result.confidence,
+      confidence_score: schedulingResult.confidence,
+      delivery_context: {
+        reasoning: schedulingResult.reasoning,
+        optimal_window: schedulingResult.optimalWindow,
+        user_state: schedulingResult.userState
+      },
       created_at: new Date().toISOString()
     };
 
@@ -332,7 +351,8 @@ async function scheduleIntelligentNotification(userId: string, params: any): Pro
       message: savedNotification.message,
       priority: savedNotification.priority,
       status: savedNotification.status,
-      created_at: savedNotification.created_at
+      created_at: savedNotification.created_at,
+      delivery_context: savedNotification.delivery_context
     };
 
   } catch (error) {
@@ -368,6 +388,211 @@ async function scheduleIntelligentNotification(userId: string, params: any): Pro
       created_at: savedNotification.created_at
     };
   }
+}
+
+function calculateOptimalSchedulingTime(
+  lifeScore: any,
+  metrics: any,
+  userProfile: any,
+  preferences: any,
+  circadianProfile: any
+): {
+  scheduledTime: Date;
+  confidence: number;
+  reasoning: string;
+  optimalWindow: any;
+  userState: string;
+} {
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // Determine current user state
+  const userState = determineCurrentUserState(metrics, lifeScore);
+  
+  // Check quiet hours
+  const quietStart = parseTime(preferences.quiet_hours?.start_time || '22:00');
+  const quietEnd = parseTime(preferences.quiet_hours?.end_time || '07:00');
+  
+  if (isInQuietHours(currentHour, quietStart, quietEnd)) {
+    // Schedule for after quiet hours
+    const nextActiveHour = (quietEnd + 1) % 24;
+    const scheduledTime = getNextOccurrenceOfHour(nextActiveHour);
+    
+    return {
+      scheduledTime,
+      confidence: 0.8,
+      reasoning: 'Scheduled after quiet hours for better receptivity',
+      optimalWindow: null,
+      userState
+    };
+  }
+
+  // Find optimal intervention window
+  const optimalWindow = findOptimalInterventionWindow(circadianProfile, userState);
+  
+  if (optimalWindow) {
+    // Schedule within the optimal window
+    const windowStart = optimalWindow.start_hour;
+    const windowEnd = optimalWindow.end_hour;
+    
+    let targetHour: number;
+    
+    if (currentHour >= windowStart && currentHour <= windowEnd) {
+      // We're currently in the window, schedule soon
+      targetHour = currentHour;
+    } else if (currentHour < windowStart) {
+      // Schedule for window start today
+      targetHour = windowStart;
+    } else {
+      // Schedule for window start tomorrow
+      targetHour = windowStart;
+    }
+    
+    const scheduledTime = getNextOccurrenceOfHour(targetHour);
+    
+    return {
+      scheduledTime,
+      confidence: optimalWindow.effectiveness_score,
+      reasoning: `Scheduled during optimal ${optimalWindow.intervention_type} window`,
+      optimalWindow,
+      userState
+    };
+  }
+
+  // Fallback: schedule based on energy levels and avoid stress peaks
+  const peakEnergyHours = circadianProfile?.peak_energy_hours || [9, 10, 11, 15, 16];
+  const stressPeakHours = circadianProfile?.stress_peak_hours || [11, 17];
+  
+  // Find next peak energy hour that's not a stress peak - FIX TYPESCRIPT
+  const goodHours = peakEnergyHours.filter((h: number) => !stressPeakHours.includes(h));
+  
+  let targetHour = currentHour + 1;
+  if (goodHours.length > 0) {
+    const nextGoodHour = goodHours.find((h: number) => h > currentHour) || goodHours[0];
+    targetHour = nextGoodHour;
+  }
+
+  const scheduledTime = getNextOccurrenceOfHour(targetHour);
+  
+  return {
+    scheduledTime,
+    confidence: 0.6,
+    reasoning: 'Scheduled during high energy, low stress period',
+    optimalWindow: null,
+    userState
+  };
+}
+
+function determineCurrentUserState(metrics: any, lifeScore: any): string {
+  const stress = metrics.stress || 3;
+  const energy = metrics.energy || 5;
+  const mood = metrics.mood || 5;
+  
+  if (stress >= 7) return 'high_stress';
+  if (energy <= 3) return 'low_energy';
+  if (mood >= 8 && energy >= 7) return 'motivated';
+  if (stress <= 2 && energy >= 6) return 'balanced';
+  
+  return 'neutral';
+}
+
+function findOptimalInterventionWindow(circadianProfile: any, userState: string): any {
+  if (!circadianProfile?.optimal_intervention_windows) return null;
+  
+  const currentHour = new Date().getHours();
+  
+  // Filter windows based on user state
+  let relevantWindows = circadianProfile.optimal_intervention_windows;
+  
+  switch (userState) {
+    case 'high_stress':
+      relevantWindows = relevantWindows.filter((w: any) => w.intervention_type === 'stress_relief');
+      break;
+    case 'low_energy':
+      relevantWindows = relevantWindows.filter((w: any) => w.intervention_type === 'energy_boost');
+      break;
+    case 'motivated':
+      relevantWindows = relevantWindows.filter((w: any) => w.intervention_type === 'celebration');
+      break;
+    default:
+      relevantWindows = relevantWindows.filter((w: any) => w.intervention_type === 'mindfulness');
+  }
+  
+  // Find the best window (highest effectiveness score)
+  return relevantWindows.sort((a: any, b: any) => b.effectiveness_score - a.effectiveness_score)[0] || null;
+}
+
+function generateContextualMessage(type: string, metrics: any, lifeScore: any, reasoning: string): string {
+  const userState = determineCurrentUserState(metrics, lifeScore);
+  
+  const messages = {
+    micro_advice: {
+      high_stress: 'Momento perfetto per una pausa rilassante. Che ne dici di 5 minuti di respirazione?',
+      low_energy: 'Ti serve una piccola spinta? Prova una breve camminata o un po\' di stretching.',
+      motivated: 'Grande energia oggi! Approfitta di questo momento per tackle un progetto importante.',
+      balanced: 'Stai andando bene! Continua così e considera un momento di mindfulness.',
+      neutral: 'Ciao! Ecco un piccolo suggerimento per migliorare la tua giornata.'
+    },
+    stress_relief: {
+      high_stress: 'Rilassati, respira profondamente. Questo momento passerà.',
+      low_energy: 'Un momento di calma può aiutarti a ricaricare le energie.',
+      motivated: 'Anche quando siamo energici, un momento di pace fa bene.',
+      balanced: 'Mantieni questo equilibrio con una breve sessione di rilassamento.',
+      neutral: 'Prenditi un momento per te stesso.'
+    },
+    energy_boost: {
+      high_stress: 'Una piccola attività fisica può aiutare a scaricare la tensione.',
+      low_energy: 'Ora è il momento perfetto per risvegliare corpo e mente!',
+      motivated: 'Cavalca questa onda di energia con un po\' di movimento!',
+      balanced: 'Un piccolo boost di energia per mantenere il ritmo.',
+      neutral: 'Che ne dici di muoverti un po\'?'
+    }
+  };
+  
+  // Safe type casting and access
+  const messageCategory = messages[type as keyof typeof messages] || messages.micro_advice;
+  const stateKey = userState as keyof typeof messageCategory;
+  
+  return messageCategory[stateKey] || messages.micro_advice.neutral;
+}
+
+function determinePriority(metrics: any, lifeScore: any): string {
+  const stress = metrics.stress || 3;
+  const energy = metrics.energy || 5;
+  const overallScore = lifeScore?.score || 65;
+  
+  if (stress >= 8 || overallScore < 30) return 'emergency';
+  if (stress >= 6 || overallScore < 50) return 'high';
+  if (energy <= 2 || overallScore < 60) return 'normal';
+  
+  return 'low';
+}
+
+function parseTime(timeStr: string): number {
+  const [hours] = timeStr.split(':').map(Number);
+  return hours;
+}
+
+function isInQuietHours(currentHour: number, quietStart: number, quietEnd: number): boolean {
+  if (quietStart < quietEnd) {
+    return currentHour >= quietStart && currentHour <= quietEnd;
+  } else {
+    // Quiet hours span midnight
+    return currentHour >= quietStart || currentHour <= quietEnd;
+  }
+}
+
+function getNextOccurrenceOfHour(targetHour: number): Date {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(targetHour, 0, 0, 0);
+  
+  // If target hour has passed today, schedule for tomorrow
+  if (target <= now) {
+    target.setDate(target.getDate() + 1);
+  }
+  
+  return target;
 }
 
 async function handleNotificationSnooze(userId: string, notificationId: string, snoozeMinutes: number) {

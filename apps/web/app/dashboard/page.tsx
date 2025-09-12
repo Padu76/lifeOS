@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight, Menu, X, ArrowLeft } from 'lucide-react';
 import MicroAdviceWidget from '../../components/MicroAdviceWidget';
-import { supabase, callEdgeFunction, getCurrentUser } from '../../lib/supabase';
+import { supabase, callEdgeFunction } from '../../lib/supabase';
 
 interface MetricData {
   label: string;
@@ -83,6 +83,20 @@ const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
               {item.label}
             </a>
           ))}
+          
+          <div className="pt-6 border-t border-white/20">
+            <button 
+              onClick={async () => {
+                await supabase.auth.signOut();
+                localStorage.clear();
+                sessionStorage.clear();
+                window.location.href = '/';
+              }}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-full font-semibold hover:scale-105 transition-transform"
+            >
+              Logout
+            </button>
+          </div>
         </nav>
       </div>
     </div>
@@ -232,9 +246,10 @@ const Dashboard: React.FC = () => {
   const [mounted, setMounted] = useState(false);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [apiCallMade, setApiCallMade] = useState(false);
+  const [apiSuccess, setApiSuccess] = useState(false);
 
   // Mock data fallback
   const fallbackData: DashboardData = {
@@ -267,54 +282,103 @@ const Dashboard: React.FC = () => {
     ]
   };
 
-  // Carica utente e dati dashboard
+  // Check auth state and load data
   useEffect(() => {
-    const loadDashboard = async () => {
+    const initializeDashboard = async () => {
+      console.log('🚀 === DASHBOARD INITIALIZATION START ===');
       setLoading(true);
       
       try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
+        // Check for authenticated user
+        console.log('🔍 Checking authentication...');
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (!currentUser) {
-          setError('Utente non autenticato');
-          setDashboardData(fallbackData);
+        if (!session?.user) {
+          console.log('❌ No authenticated user found, redirecting to sign-in');
+          window.location.href = '/sign-in';
           return;
         }
 
-        console.log('Calling get-wellness-dashboard Edge Function...');
-        
-        // Chiamata alla Edge Function per ottenere dati dashboard
-        const data = await callEdgeFunction('get-wellness-dashboard', {
-          user_id: currentUser.id,
-          time_range: '7d',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        console.log('✅ User authenticated:', {
+          id: session.user.id,
+          email: session.user.email,
+          created_at: session.user.created_at
         });
+        setUser(session.user);
 
-        console.log('Dashboard API response:', data);
+        // Try to load real dashboard data
+        console.log('📡 === API CALL START ===');
+        setApiCallMade(true);
         
-        if (data && data.dashboard) {
-          setDashboardData({
-            life_score: data.dashboard.life_score || fallbackData.life_score,
-            metrics: data.dashboard.metrics || fallbackData.metrics,
-            weekly_data: data.dashboard.weekly_data || fallbackData.weekly_data,
-            recent_activities: data.dashboard.recent_activities || fallbackData.recent_activities,
-            achievements: data.dashboard.achievements || fallbackData.achievements
+        try {
+          const apiPayload = {
+            user_id: session.user.id,
+            time_range: '7d',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          };
+          
+          console.log('📤 API Payload:', apiPayload);
+          
+          const data = await callEdgeFunction('get-wellness-dashboard', apiPayload);
+          
+          console.log('🔥 === API RESPONSE START ===');
+          console.log('Raw API Response:', data);
+          console.log('Response type:', typeof data);
+          console.log('Response keys:', data ? Object.keys(data) : 'No keys (null/undefined)');
+          
+          if (data && data.dashboard) {
+            console.log('📊 Dashboard data found:', {
+              life_score: data.dashboard.life_score,
+              metrics_count: data.dashboard.metrics?.length,
+              weekly_data_count: data.dashboard.weekly_data?.length,
+              activities_count: data.dashboard.recent_activities?.length,
+              achievements_count: data.dashboard.achievements?.length
+            });
+          } else {
+            console.log('📊 No dashboard data in response');
+          }
+          console.log('🔥 === API RESPONSE END ===');
+          
+          if (data && data.dashboard) {
+            console.log('✅ Using API data for dashboard');
+            setDashboardData({
+              life_score: data.dashboard.life_score || fallbackData.life_score,
+              metrics: data.dashboard.metrics || fallbackData.metrics,
+              weekly_data: data.dashboard.weekly_data || fallbackData.weekly_data,
+              recent_activities: data.dashboard.recent_activities || fallbackData.recent_activities,
+              achievements: data.dashboard.achievements || fallbackData.achievements
+            });
+            setApiSuccess(true);
+          } else {
+            console.log('⚠️ API returned but no dashboard data, using fallback');
+            setDashboardData(fallbackData);
+            setApiSuccess(false);
+          }
+        } catch (apiError) {
+          console.log('❌ === API CALL FAILED ===');
+          console.error('API Error Details:', {
+            message: apiError instanceof Error ? apiError.message : String(apiError),
+            stack: apiError instanceof Error ? apiError.stack : undefined,
+            name: apiError instanceof Error ? apiError.name : typeof apiError
           });
-        } else {
+          console.log('Using fallback data due to API failure');
           setDashboardData(fallbackData);
+          setApiSuccess(false);
         }
         
+        console.log('📡 === API CALL END ===');
+        
       } catch (err: any) {
-        console.error('Error loading dashboard:', err);
-        setError(err.message);
-        setDashboardData(fallbackData); // Fallback ai mock data
+        console.error('💥 Critical auth error:', err);
+        window.location.href = '/sign-in';
+        return;
       } finally {
         setLoading(false);
+        console.log('🏁 === DASHBOARD INITIALIZATION END ===');
       }
     };
 
-    loadDashboard();
+    initializeDashboard();
   }, []);
 
   useEffect(() => {
@@ -330,18 +394,37 @@ const Dashboard: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Logout error:', error);
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <div className="text-center p-4">
           <div className="w-12 h-12 sm:w-16 sm:h-16 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
           <div className="text-white text-base sm:text-lg">Caricamento dashboard...</div>
+          {apiCallMade && (
+            <div className="text-white/60 text-sm mt-2">
+              {apiSuccess ? 'Caricamento dati reali...' : 'Caricamento dati demo...'}
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
-  if (!dashboardData) {
+  if (!dashboardData || !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <div className="text-center p-4">
@@ -382,11 +465,11 @@ const Dashboard: React.FC = () => {
         }}
       />
 
-      {/* Navigation - Mobile Optimized */}
+      {/* Single Navigation Header */}
       <nav className="relative z-50 bg-black/20 backdrop-blur-lg border-b border-white/10 sticky top-0">
         <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            {/* Home button - sempre visibile */}
+            {/* Left: Home button */}
             <a 
               href="/" 
               className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors min-w-0 flex-shrink-0"
@@ -395,46 +478,59 @@ const Dashboard: React.FC = () => {
               <span className="text-sm sm:text-base">Home</span>
             </a>
             
-            {/* Logo centralized */}
-            <div className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              LifeOS
+            {/* Center: Title and User Info */}
+            <div className="text-center">
+              <div className="text-lg sm:text-xl font-bold text-white">Dashboard</div>
+              <div className="text-xs text-white/60 flex items-center gap-2">
+                {user.email}
+                {/* Debug info */}
+                {apiCallMade && (
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    apiSuccess 
+                      ? 'bg-green-500/20 text-green-300' 
+                      : 'bg-orange-500/20 text-orange-300'
+                  }`}>
+                    {apiSuccess ? 'API OK' : 'Fallback'}
+                  </span>
+                )}
+              </div>
             </div>
             
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 text-white/80 hover:text-white transition-colors"
-              aria-label="Apri menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex space-x-8 text-white/80">
-              <a href="/" className="hover:text-white transition-colors">Home</a>
-              <a href="/suggestions" className="hover:text-white transition-colors">Suggestions</a>
-              <a href="/dashboard" className="text-white font-semibold">Dashboard</a>
-              <a href="/settings" className="hover:text-white transition-colors">Settings</a>
+            {/* Right: Menu/Navigation */}
+            <div className="flex items-center gap-4">
+              {/* Desktop Navigation */}
+              <div className="hidden md:flex space-x-6 text-white/80 text-sm">
+                <a href="/" className="hover:text-white transition-colors">Home</a>
+                <a href="/suggestions" className="hover:text-white transition-colors">Suggestions</a>
+                <a href="/dashboard" className="text-white font-semibold">Dashboard</a>
+                <a href="/settings" className="hover:text-white transition-colors">Settings</a>
+              </div>
+              
+              {/* Desktop Logout */}
+              <button 
+                onClick={handleLogout}
+                className="hidden md:block bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full font-medium hover:scale-105 transition-transform text-sm"
+              >
+                Logout
+              </button>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden p-2 text-white/80 hover:text-white transition-colors"
+                aria-label="Apri menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
             </div>
-            
-            {/* Logout Button - Desktop */}
-            <button 
-              onClick={async () => {
-                await supabase.auth.signOut();
-                window.location.href = '/';
-              }}
-              className="hidden md:block bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform"
-            >
-              Logout
-            </button>
           </div>
         </div>
       </nav>
 
-      {/* Header - Mobile Optimized */}
-      <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-6 sm:pb-8 lg:pb-12 px-4 sm:px-6">
+      {/* Main Content */}
+      <section className="relative pt-8 sm:pt-12 lg:pt-16 pb-6 sm:pb-8 lg:pb-12 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8 mb-8">
             <div className="text-center lg:text-left">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3 sm:mb-4">
                 La tua
@@ -445,14 +541,9 @@ const Dashboard: React.FC = () => {
               <p className="text-base sm:text-lg lg:text-xl text-white/70 max-w-2xl">
                 Monitora i tuoi progressi e scopri insights personalizzati sul tuo benessere
               </p>
-              {error && (
-                <div className="mt-4 text-xs sm:text-sm text-yellow-400 bg-yellow-500/20 px-3 py-2 rounded-lg inline-block">
-                  API non disponibile - modalità fallback attiva
-                </div>
-              )}
             </div>
 
-            {/* Life Score Ring - Mobile Optimized */}
+            {/* Life Score Ring */}
             <div className="flex-shrink-0 relative">
               <LifeScoreRing score={dashboardData.life_score} />
             </div>
@@ -460,18 +551,28 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* MicroAdvice Widget - Mobile Optimized */}
+      {/* MicroAdvice Widget with Dashboard Data */}
       <section className="relative py-6 sm:py-8 lg:py-12 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
           <MicroAdviceWidget 
             className="bg-white/5 backdrop-blur-lg rounded-3xl p-4 sm:p-6 lg:p-8 border border-white/10"
             maxAdvices={2}
             autoRefresh={true}
+            dashboardData={{
+              current_life_score: {
+                stress: dashboardData.metrics[0].value,
+                energy: dashboardData.metrics[1].value,
+                sleep: dashboardData.metrics[2].value,
+                overall: dashboardData.life_score,
+                last_updated: new Date().toISOString()
+              },
+              metrics: dashboardData.metrics
+            }}
           />
         </div>
       </section>
 
-      {/* Metrics Grid - Mobile Optimized */}
+      {/* Metrics Grid */}
       <section className="relative py-6 sm:py-8 lg:py-12 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
           <h2 className="text-xl sm:text-2xl font-bold text-white mb-6 sm:mb-8 flex items-center gap-3">
@@ -508,7 +609,7 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* Charts Section - Mobile Optimized Stack Layout */}
+      {/* Charts Section */}
       <section className="relative py-6 sm:py-8 lg:py-12 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
@@ -537,7 +638,7 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Recent Activity - Mobile Optimized */}
+            {/* Recent Activity */}
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-6 border border-white/20">
               <div className="flex items-center gap-3 mb-4 sm:mb-6">
                 <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
@@ -566,7 +667,7 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* Achievements - Mobile Optimized */}
+      {/* Achievements */}
       <section className="relative py-6 sm:py-8 lg:py-12 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
           <div className="flex items-center gap-3 mb-6 sm:mb-8">
@@ -589,15 +690,15 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* Quick Actions - Mobile Optimized */}
+      {/* Quick Actions */}
       <section className="relative py-12 sm:py-16 lg:py-20 px-4 sm:px-6">
         <div className="container mx-auto max-w-4xl text-center">
           <div className="bg-white/5 backdrop-blur-lg rounded-3xl p-6 sm:p-8 lg:p-12 border border-white/10">
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 sm:mb-6">
-              Pronto per i prossimi consigli?
+              Continua il tuo percorso
             </h2>
             <p className="text-base sm:text-lg lg:text-xl text-white/70 mb-6 sm:mb-8">
-              Continua il tuo percorso di benessere con suggerimenti personalizzati
+              Esplora nuovi consigli personalizzati per il tuo benessere
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
@@ -607,10 +708,10 @@ const Dashboard: React.FC = () => {
                 Nuovi Consigli
               </a>
               <a
-                href="/settings"
+                href="/checkin"
                 className="border-2 border-white/30 text-white px-6 sm:px-8 py-4 rounded-full font-bold text-base sm:text-lg hover:bg-white/10 transition-colors min-h-[44px] flex items-center justify-center"
               >
-                Aggiorna Profilo
+                Check-in Giornaliero
               </a>
             </div>
           </div>

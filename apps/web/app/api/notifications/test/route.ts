@@ -1,30 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntelligentPushSystem } from '@lifeos/core/advice/intelligentPushSystem';
-import { EmpatheticLanguageEngine } from '@lifeos/core/advice/empatheticLanguageEngine';
 import { createClient } from '@supabase/supabase-js';
 
 interface TestNotificationRequest {
   type: 'immediate' | 'scheduled' | 'optimal_timing';
-  category?: 'stress_relief' | 'energy_boost' | 'sleep_prep' | 'celebration' | 'motivation';
+  category?: 'stress_relief' | 'energy_boost' | 'celebration' | 'mindfulness' | 'sleep_prep';
   message?: string;
-  priority?: 'low' | 'normal' | 'high' | 'emergency';
-  scheduled_time?: string; // ISO string
-  test_emotional_state?: 'stressed' | 'energetic' | 'tired' | 'balanced' | 'anxious' | 'motivated';
+  scheduled_time?: string;
 }
 
 interface TestNotificationResponse {
-  success: boolean;
-  notification_id: string;
+  id: string;
+  type: string;
+  category: string;
   message: string;
-  scheduled_time: string;
-  delivery_method: 'push' | 'in_app' | 'email';
-  confidence_score?: number;
-  reasoning?: string;
-  test_results: {
+  scheduled_time?: string;
+  delivery_context: {
     timing_analysis: any;
     emotional_context: any;
-    empathetic_message: any;
+    effectiveness_prediction: number;
+    confidence_score: number;
   };
+  test_results: {
+    appropriateness_score: number;
+    personalization_score: number;
+    predicted_engagement: number;
+    reasoning: string;
+  };
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const url = new URL(request.url);
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const type = url.searchParams.get('type');
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    let query = supabase
+      .from('test_notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    const { data: testNotifications, error } = await query;
+
+    if (error) {
+      console.error('Error fetching test notifications:', error);
+      return NextResponse.json({ error: 'Failed to fetch test notifications' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: testNotifications,
+      meta: {
+        total: testNotifications.length,
+        type: type || 'all'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in test notifications GET:', error);
+    return NextResponse.json({
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? 
+        (error instanceof Error ? error.message : String(error)) : undefined
+    }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -35,138 +89,109 @@ export async function POST(request: NextRequest) {
     }
 
     const body: TestNotificationRequest = await request.json();
-    const { 
-      type, 
-      category = 'motivation', 
-      message, 
-      priority = 'normal',
-      scheduled_time,
-      test_emotional_state 
-    } = body;
+    const { type, category = 'mindfulness', message, scheduled_time } = body;
+
+    if (!type) {
+      return NextResponse.json({ error: 'Test type required' }, { status: 400 });
+    }
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Initialize systems
-    const pushSystem = new IntelligentPushSystem();
-    const languageEngine = new EmpatheticLanguageEngine();
+    // Get user data for context
+    const [
+      { data: recentMetrics },
+      { data: lifeScore },
+      { data: emotionalState },
+      { data: circadianProfile }
+    ] = await Promise.all([
+      supabase.from('health_metrics').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(1).single(),
+      supabase.from('life_scores').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(1).single(),
+      supabase.from('emotional_states').select('*').eq('user_id', userId).order('timestamp', { ascending: false }).limit(1).single(),
+      supabase.from('circadian_profiles').select('*').eq('user_id', userId).single()
+    ]);
 
-    // Get user data for testing
-    const userData = await getUserDataForTesting(userId, test_emotional_state);
+    // Prepare default data
+    const defaultMetrics = recentMetrics || getDefaultMetrics();
+    const defaultLifeScore = lifeScore || getDefaultLifeScore();
+    const defaultEmotionalState = emotionalState || getDefaultEmotionalState();
+    const defaultCircadianProfile = circadianProfile || getDefaultCircadianProfile();
 
-    let result: TestNotificationResponse;
+    // Generate test notification based on type
+    let testNotification: TestNotificationResponse;
 
     switch (type) {
       case 'immediate':
-        result = await testImmediateNotification(
-          userId, 
-          category, 
-          message, 
-          priority as any, 
-          userData, 
-          pushSystem, 
-          languageEngine
+        testNotification = await generateImmediateTest(
+          userId,
+          category,
+          message,
+          defaultMetrics,
+          defaultLifeScore,
+          defaultEmotionalState
         );
         break;
 
       case 'scheduled':
         if (!scheduled_time) {
-          return NextResponse.json({ 
-            error: 'scheduled_time required for scheduled test' 
-          }, { status: 400 });
+          return NextResponse.json({ error: 'Scheduled time required for scheduled test' }, { status: 400 });
         }
-        result = await testScheduledNotification(
+        testNotification = await generateScheduledTest(
           userId,
           category,
           message,
-          new Date(scheduled_time),
-          userData,
-          pushSystem,
-          languageEngine
+          scheduled_time,
+          defaultMetrics,
+          defaultLifeScore,
+          defaultEmotionalState
         );
         break;
 
       case 'optimal_timing':
-        result = await testOptimalTimingNotification(
+        testNotification = await generateOptimalTimingTest(
           userId,
           category,
           message,
-          userData,
-          pushSystem,
-          languageEngine
+          defaultMetrics,
+          defaultLifeScore,
+          defaultEmotionalState,
+          defaultCircadianProfile
         );
         break;
 
       default:
-        return NextResponse.json({ 
-          error: 'Invalid test type. Use: immediate, scheduled, or optimal_timing' 
-        }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid test type' }, { status: 400 });
     }
 
-    // Log test for analytics
-    await supabase
-      .from('notification_tests')
+    // Save test notification to database
+    const { error: saveError } = await supabase
+      .from('test_notifications')
       .insert({
+        id: testNotification.id,
         user_id: userId,
-        test_type: type,
-        category,
-        notification_id: result.notification_id,
-        confidence_score: result.confidence_score,
-        test_results: result.test_results,
+        type: testNotification.type,
+        category: testNotification.category,
+        message: testNotification.message,
+        scheduled_time: testNotification.scheduled_time,
+        delivery_context: testNotification.delivery_context,
+        test_results: testNotification.test_results,
         created_at: new Date().toISOString()
       });
 
-    return NextResponse.json(result);
-
-  } catch (error) {
-    console.error('Error in test notification API:', error);
-    return NextResponse.json({
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? 
-        (error instanceof Error ? error.message : String(error)) : undefined
-    }, { status: 500 });
-  }
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const userId = await getUserIdFromRequest(request);
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    // Get recent test results
-    const { data: testResults, error } = await supabase
-      .from('notification_tests')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (error) {
-      console.error('Error fetching test results:', error);
-      return NextResponse.json({ error: 'Failed to fetch test results' }, { status: 500 });
+    if (saveError) {
+      console.error('Error saving test notification:', saveError);
     }
 
     return NextResponse.json({
       success: true,
-      data: testResults,
-      meta: {
-        total: testResults.length,
-        available_test_types: ['immediate', 'scheduled', 'optimal_timing'],
-        available_categories: ['stress_relief', 'energy_boost', 'sleep_prep', 'celebration', 'motivation']
-      }
+      data: testNotification,
+      message: 'Test notification generated successfully'
     });
 
   } catch (error) {
-    console.error('Error in test notification GET:', error);
+    console.error('Error in test notifications POST:', error);
     return NextResponse.json({
       error: 'Internal server error',
       details: process.env.NODE_ENV === 'development' ? 
@@ -182,434 +207,483 @@ async function getUserIdFromRequest(request: NextRequest): Promise<string | null
   
   try {
     const token = authHeader.replace('Bearer ', '');
-    // Implement your JWT verification here
-    return 'user_123'; // Mock for development
+    
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Auth verification failed:', error);
+      return null;
+    }
+    
+    return user.id;
   } catch (error) {
+    console.error('Error verifying auth token:', error);
     return null;
   }
 }
 
-async function getUserDataForTesting(userId: string, testEmotionalState?: string) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  // Get user data or use defaults for testing
-  const [
-    { data: recentMetrics },
-    { data: lifeScore },
-    { data: userProfile },
-    { data: circadianProfile },
-    { data: preferences }
-  ] = await Promise.all([
-    supabase.from('health_metrics').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(1),
-    supabase.from('life_scores').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(1),
-    supabase.from('user_profiles').select('*').eq('user_id', userId).single(),
-    supabase.from('circadian_profiles').select('*').eq('user_id', userId).single(),
-    supabase.from('notification_preferences').select('*').eq('user_id', userId).single()
-  ]);
-
-  // Create test data with optional emotional state override
-  const testMetrics = recentMetrics?.[0] || getTestMetrics(testEmotionalState);
-  const testLifeScore = lifeScore?.[0] || getTestLifeScore(testEmotionalState);
+async function generateImmediateTest(
+  userId: string,
+  category: string,
+  customMessage: string | undefined,
+  metrics: any,
+  lifeScore: any,
+  emotionalState: any
+): Promise<TestNotificationResponse> {
+  const currentTime = new Date();
+  const timeOfDay = getTimeOfDay(currentTime);
   
-  return {
-    metrics: testMetrics,
-    lifeScore: testLifeScore,
-    userProfile: userProfile || getTestUserProfile(),
-    circadianProfile: circadianProfile || getTestCircadianProfile(),
-    preferences: preferences || getTestPreferences()
-  };
-}
-
-async function testImmediateNotification(
-  userId: string,
-  category: string,
-  customMessage: string | undefined,
-  priority: 'low' | 'normal' | 'high' | 'emergency',
-  userData: any,
-  pushSystem: IntelligentPushSystem,
-  languageEngine: EmpatheticLanguageEngine
-): Promise<TestNotificationResponse> {
-
+  // Analyze current context
+  const timingAnalysis = analyzeCurrentTiming(currentTime, metrics, emotionalState);
+  const emotionalContext = analyzeEmotionalContext(emotionalState, metrics);
+  
   // Generate empathetic message
-  const empatheticContext = buildEmpatheticContext(userData);
-  const generatedMessage = languageEngine.generateMessage(
-    empatheticContext,
-    category as any,
-    userData.userProfile
+  const generatedMessage = customMessage || generateEmpatheticMessage(
+    category,
+    emotionalState.current_state || 'balanced',
+    timeOfDay
   );
 
-  const finalMessage = customMessage || generatedMessage.content;
-
-  // Send immediate notification (test mode)
-  const notificationId = await pushSystem.sendImmediateNotification(
-    userId,
-    generatedMessage,
-    priority as any,
-    userData.preferences
-  );
+  // Calculate effectiveness scores
+  const appropriatenessScore = calculateAppropriatenessScore(category, emotionalState, timingAnalysis);
+  const personalizationScore = calculatePersonalizationScore(generatedMessage, emotionalState, metrics);
+  const predictedEngagement = calculateEngagementPrediction(category, timingAnalysis, emotionalContext);
 
   return {
-    success: true,
-    notification_id: notificationId,
-    message: finalMessage,
-    scheduled_time: new Date().toISOString(),
-    delivery_method: 'push',
-    test_results: {
-      timing_analysis: {
-        type: 'immediate',
-        current_time: new Date().toISOString(),
-        timing_appropriateness: analyzeCurrentTiming(userData.circadianProfile)
-      },
-      emotional_context: empatheticContext,
-      empathetic_message: {
-        generated_content: generatedMessage.content,
-        tone: generatedMessage.tone,
-        personalization_score: generatedMessage.personalization_score,
-        predicted_effectiveness: generatedMessage.predicted_effectiveness
-      }
-    }
-  };
-}
-
-async function testScheduledNotification(
-  userId: string,
-  category: string,
-  customMessage: string | undefined,
-  scheduledTime: Date,
-  userData: any,
-  pushSystem: IntelligentPushSystem,
-  languageEngine: EmpatheticLanguageEngine
-): Promise<TestNotificationResponse> {
-
-  // Generate empathetic message
-  const empatheticContext = buildEmpatheticContext(userData);
-  const generatedMessage = languageEngine.generateMessage(
-    empatheticContext,
-    category as any,
-    userData.userProfile
-  );
-
-  const finalMessage = customMessage || generatedMessage.content;
-
-  // Schedule notification (test mode - not actually scheduled)
-  const notificationId = crypto.randomUUID();
-
-  // Analyze timing for the specified time
-  const timingAnalysis = analyzeScheduledTiming(scheduledTime, userData.circadianProfile);
-
-  return {
-    success: true,
-    notification_id: notificationId,
-    message: finalMessage,
-    scheduled_time: scheduledTime.toISOString(),
-    delivery_method: 'push',
-    confidence_score: timingAnalysis.confidence,
-    reasoning: timingAnalysis.reasoning,
-    test_results: {
+    id: crypto.randomUUID(),
+    type: 'immediate',
+    category,
+    message: generatedMessage,
+    delivery_context: {
       timing_analysis: timingAnalysis,
-      emotional_context: empatheticContext,
-      empathetic_message: {
-        generated_content: generatedMessage.content,
-        tone: generatedMessage.tone,
-        personalization_score: generatedMessage.personalization_score,
-        predicted_effectiveness: generatedMessage.predicted_effectiveness
-      }
+      emotional_context: emotionalContext,
+      effectiveness_prediction: (appropriatenessScore + personalizationScore + predictedEngagement) / 3,
+      confidence_score: Math.min(timingAnalysis.confidence * emotionalContext.confidence, 1.0)
+    },
+    test_results: {
+      appropriateness_score: appropriatenessScore,
+      personalization_score: personalizationScore,
+      predicted_engagement: predictedEngagement,
+      reasoning: `Immediate test for ${category} during ${timeOfDay}. ${emotionalState.current_state} state detected.`
     }
   };
 }
 
-async function testOptimalTimingNotification(
+async function generateScheduledTest(
   userId: string,
   category: string,
   customMessage: string | undefined,
-  userData: any,
-  pushSystem: IntelligentPushSystem,
-  languageEngine: EmpatheticLanguageEngine
+  scheduledTime: string,
+  metrics: any,
+  lifeScore: any,
+  emotionalState: any
 ): Promise<TestNotificationResponse> {
-
-  // Use intelligent scheduling system
-  const result = await pushSystem.scheduleAdviceNotification(
-    userId,
-    userData.lifeScore,
-    userData.metrics,
-    userData.userProfile,
-    userData.preferences,
-    userData.circadianProfile
+  const scheduleDate = new Date(scheduledTime);
+  const timeOfDay = getTimeOfDay(scheduleDate);
+  
+  // Analyze scheduled timing
+  const timingAnalysis = analyzeScheduledTiming(scheduleDate, metrics);
+  const emotionalContext = analyzeEmotionalContext(emotionalState, metrics);
+  
+  // Generate message for future context
+  const generatedMessage = customMessage || generateEmpatheticMessage(
+    category,
+    'balanced', // Assume balanced state for future scheduling
+    timeOfDay
   );
 
-  // Generate empathetic message
-  const empatheticContext = buildEmpatheticContext(userData);
-  const generatedMessage = languageEngine.generateMessage(
-    empatheticContext,
-    category as any,
-    userData.userProfile
-  );
-
-  const finalMessage = customMessage || generatedMessage.content;
+  const appropriatenessScore = calculateAppropriatenessScore(category, emotionalState, timingAnalysis);
+  const personalizationScore = calculatePersonalizationScore(generatedMessage, emotionalState, metrics);
+  const predictedEngagement = calculateEngagementPrediction(category, timingAnalysis, emotionalContext);
 
   return {
-    success: true,
-    notification_id: result.notificationId,
-    message: finalMessage,
-    scheduled_time: result.scheduledTime.toISOString(),
-    delivery_method: 'push',
-    confidence_score: result.confidence,
-    reasoning: `Optimal timing calculated by intelligent system`,
+    id: crypto.randomUUID(),
+    type: 'scheduled',
+    category,
+    message: generatedMessage,
+    scheduled_time: scheduledTime,
+    delivery_context: {
+      timing_analysis: timingAnalysis,
+      emotional_context: emotionalContext,
+      effectiveness_prediction: (appropriatenessScore + personalizationScore + predictedEngagement) / 3,
+      confidence_score: timingAnalysis.confidence * 0.8 // Lower confidence for future prediction
+    },
     test_results: {
-      timing_analysis: {
-        type: 'optimal',
-        calculated_time: result.scheduledTime.toISOString(),
-        confidence: result.confidence,
-        factors_considered: [
-          'circadian_profile',
-          'current_life_score',
-          'historical_patterns',
-          'user_preferences'
-        ]
-      },
-      emotional_context: empatheticContext,
-      empathetic_message: {
-        generated_content: generatedMessage.content,
-        tone: generatedMessage.tone,
-        personalization_score: generatedMessage.personalization_score,
-        predicted_effectiveness: generatedMessage.predicted_effectiveness
-      }
+      appropriateness_score: appropriatenessScore,
+      personalization_score: personalizationScore,
+      predicted_engagement: predictedEngagement,
+      reasoning: `Scheduled test for ${category} at ${timeOfDay} on ${scheduleDate.toDateString()}.`
     }
   };
 }
 
-function buildEmpatheticContext(userData: any): any {
-  const languageEngine = new EmpatheticLanguageEngine();
+async function generateOptimalTimingTest(
+  userId: string,
+  category: string,
+  customMessage: string | undefined,
+  metrics: any,
+  lifeScore: any,
+  emotionalState: any,
+  circadianProfile: any
+): Promise<TestNotificationResponse> {
+  // Find optimal timing using circadian profile
+  const optimalTime = findOptimalDeliveryTime(category, circadianProfile, emotionalState);
+  const timeOfDay = getTimeOfDay(optimalTime);
   
-  return {
-    emotional_state: languageEngine.analyzeEmotionalState(userData.lifeScore, userData.metrics),
-    time_of_day: determineTimeOfDay(),
-    current_streak: 0, // Would be loaded from database
-    recent_completion_rate: 0.7,
-    preferred_tone: userData.preferences.tone_preference === 'adaptive' ? 
-      languageEngine.determineOptimalTone(userData.userProfile, 'balanced', 'morning') :
-      userData.preferences.tone_preference,
-    personality_traits: [],
-    historical_effectiveness: {}
-  };
-}
-
-function analyzeCurrentTiming(circadianProfile: any): any {
-  const currentHour = new Date().getHours();
-  const isOptimalWindow = circadianProfile.optimal_intervention_windows?.some(
-    (window: any) => currentHour >= window.start_hour && currentHour <= window.end_hour
+  const timingAnalysis = analyzeOptimalTiming(optimalTime, circadianProfile, emotionalState);
+  const emotionalContext = analyzeEmotionalContext(emotionalState, metrics);
+  
+  // Generate optimally-timed message
+  const generatedMessage = customMessage || generateEmpatheticMessage(
+    category,
+    emotionalState.current_state || 'balanced',
+    timeOfDay
   );
-  
+
+  const appropriatenessScore = calculateAppropriatenessScore(category, emotionalState, timingAnalysis);
+  const personalizationScore = calculatePersonalizationScore(generatedMessage, emotionalState, metrics);
+  const predictedEngagement = calculateEngagementPrediction(category, timingAnalysis, emotionalContext);
+
   return {
-    current_hour: currentHour,
-    is_optimal_window: isOptimalWindow,
-    energy_level: circadianProfile.peak_energy_hours?.includes(currentHour) ? 'high' : 
-                  circadianProfile.low_energy_hours?.includes(currentHour) ? 'low' : 'normal',
-    stress_likelihood: circadianProfile.stress_peak_hours?.includes(currentHour) ? 'high' : 'normal',
-    appropriateness_score: isOptimalWindow ? 0.8 : 0.5
+    id: crypto.randomUUID(),
+    type: 'optimal_timing',
+    category,
+    message: generatedMessage,
+    scheduled_time: optimalTime.toISOString(),
+    delivery_context: {
+      timing_analysis: timingAnalysis,
+      emotional_context: emotionalContext,
+      effectiveness_prediction: (appropriatenessScore + personalizationScore + predictedEngagement) / 3,
+      confidence_score: timingAnalysis.confidence * emotionalContext.confidence
+    },
+    test_results: {
+      appropriateness_score: appropriatenessScore,
+      personalization_score: personalizationScore,
+      predicted_engagement: predictedEngagement,
+      reasoning: `Optimal timing test for ${category}. Best delivery window identified at ${timeOfDay}.`
+    }
   };
 }
 
-function analyzeScheduledTiming(scheduledTime: Date, circadianProfile: any): any {
-  const scheduledHour = scheduledTime.getHours();
-  const optimalWindow = circadianProfile.optimal_intervention_windows?.find(
-    (window: any) => scheduledHour >= window.start_hour && scheduledHour <= window.end_hour
-  );
+function generateEmpatheticMessage(category: string, emotionalState: string, timeOfDay: string): string {
+  const messageTemplates = {
+    stress_relief: {
+      stressed: 'So che stai attraversando un momento difficile. Prenditi qualche minuto per respirare profondamente.',
+      anxious: 'L\'ansia può essere travolgente. Ricorda che sei al sicuro e che questo momento passerà.',
+      tired: 'Ti senti stanco? Un momento di relax può aiutarti a ritrovare energie.',
+      balanced: 'Stai gestendo bene le cose. Una pausa mindful può aiutarti a mantenere questo equilibrio.',
+      energetic: 'Anche con tutta questa energia, un momento di calma può essere benefico.',
+      motivated: 'La tua motivazione è fantastica! Bilanciala con un po\' di autocura.'
+    },
+    energy_boost: {
+      stressed: 'Lo stress può prosciugare le energie. Che ne dici di una breve attività per ricaricati?',
+      anxious: 'L\'attività fisica può aiutare a gestire l\'ansia. Prova qualche movimento dolce.',
+      tired: 'Ti serve una spinta? Anche 5 minuti di movimento possono fare la differenza.',
+      balanced: 'Mantieni questo equilibrio con un po\' di movimento energizzante.',
+      energetic: 'Perfetto! Incanala questa energia in qualcosa di positivo.',
+      motivated: 'La tua motivazione è contagiosa! Trasformala in azione.'
+    },
+    celebration: {
+      stressed: 'Nonostante le sfide, stai facendo del tuo meglio. Questo merita riconoscimento.',
+      anxious: 'Hai superato momenti difficili prima d\'ora. Celebra la tua resilienza.',
+      tired: 'Anche quando sei stanco, continui ad andare avanti. Questo è ammirevole.',
+      balanced: 'Il tuo equilibrio è qualcosa di cui essere orgoglioso. Celebra questo momento.',
+      energetic: 'La tua energia positiva illumina tutto! Continua così.',
+      motivated: 'La tua determinazione è ispiratrice. Prenditi un momento per apprezzarla.'
+    },
+    mindfulness: {
+      stressed: 'In questo momento di stress, trova pace nel respiro e nella presenza.',
+      anxious: 'Torna al presente. Qui e ora sei al sicuro.',
+      tired: 'Anche nella stanchezza, c\'è saggezza. Ascolta cosa ti dice il tuo corpo.',
+      balanced: 'Questo equilibrio è prezioso. Rimani presente per apprezzarlo pienamente.',
+      energetic: 'Tutta questa energia... come la senti nel corpo? Rimani connesso.',
+      motivated: 'La motivazione nasce dal presente. Sentila, respirala, vivila.'
+    },
+    sleep_prep: {
+      stressed: 'È tempo di lasciare andare le preoccupazioni della giornata. Il riposo ti aspetta.',
+      anxious: 'La notte può portare pace. Prepara mente e corpo per un sonno ristoratore.',
+      tired: 'Il tuo corpo sa di cosa ha bisogno. Crea le condizioni per un riposo profondo.',
+      balanced: 'Questo equilibrio può accompagnarti in un sonno sereno.',
+      energetic: 'Anche l\'energia ha bisogno di riposo per rinnovarsi. Rallenta dolcemente.',
+      motivated: 'La vera produttività include il riposo. Prepara il terreno per domani.'
+    }
+  };
+
+  const timeAdjustments = {
+    morning: ' Inizia la giornata con gentilezza verso te stesso.',
+    afternoon: ' Nel mezzo della giornata, riconnettiti con te stesso.',
+    evening: ' Mentre la giornata volge al termine, prenditi cura di te.',
+    night: ' In queste ore tranquille, trova pace.'
+  };
+
+  // Safe type casting and access
+  const categoryTemplates = messageTemplates[category as keyof typeof messageTemplates] || messageTemplates.mindfulness;
+  const stateKey = emotionalState as keyof typeof categoryTemplates;
+  const baseMessage = categoryTemplates[stateKey] || messageTemplates.mindfulness.balanced;
   
-  let confidence = 0.5; // Base confidence
-  let reasoning = '';
-  
-  if (optimalWindow) {
-    confidence = optimalWindow.effectiveness_score;
-    reasoning = `Scheduled during optimal ${optimalWindow.intervention_type} window`;
-  } else {
-    reasoning = 'Scheduled outside optimal intervention windows';
-  }
-  
-  const isHighEnergyTime = circadianProfile.peak_energy_hours?.includes(scheduledHour);
-  const isLowEnergyTime = circadianProfile.low_energy_hours?.includes(scheduledHour);
-  const isStressPeakTime = circadianProfile.stress_peak_hours?.includes(scheduledHour);
-  
-  if (isHighEnergyTime) {
-    confidence += 0.1;
-    reasoning += '. High energy time detected';
-  } else if (isLowEnergyTime) {
-    confidence -= 0.1;
-    reasoning += '. Low energy time - may reduce effectiveness';
-  }
-  
-  if (isStressPeakTime) {
-    confidence -= 0.05;
-    reasoning += '. Stress peak time - user may be less receptive';
-  }
+  const timeAdjustment = timeAdjustments[timeOfDay as keyof typeof timeAdjustments] || '';
+
+  return baseMessage + timeAdjustment;
+}
+
+// Analysis helper functions
+function analyzeCurrentTiming(currentTime: Date, metrics: any, emotionalState: any): any {
+  const hour = currentTime.getHours();
+  const dayOfWeek = currentTime.getDay();
   
   return {
-    scheduled_hour: scheduledHour,
-    confidence: Math.max(0.1, Math.min(1, confidence)),
-    reasoning,
-    optimal_window: optimalWindow,
-    energy_level: isHighEnergyTime ? 'high' : isLowEnergyTime ? 'low' : 'normal',
-    stress_likelihood: isStressPeakTime ? 'high' : 'normal'
+    hour,
+    day_of_week: dayOfWeek,
+    is_weekend: dayOfWeek === 0 || dayOfWeek === 6,
+    energy_level: metrics.energy || 5,
+    stress_level: metrics.stress || 3,
+    appropriateness: calculateTimeAppropriateness(hour, metrics),
+    confidence: 0.8
   };
 }
 
-function determineTimeOfDay(): string {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return 'morning';
-  if (hour >= 12 && hour < 17) return 'afternoon';
-  if (hour >= 17 && hour < 22) return 'evening';
-  return 'night';
+function analyzeScheduledTiming(scheduledTime: Date, metrics: any): any {
+  const hour = scheduledTime.getHours();
+  const dayOfWeek = scheduledTime.getDay();
+  
+  return {
+    hour,
+    day_of_week: dayOfWeek,
+    is_weekend: dayOfWeek === 0 || dayOfWeek === 6,
+    predicted_energy: predictEnergyAtTime(hour),
+    predicted_stress: predictStressAtTime(hour),
+    appropriateness: calculateTimeAppropriateness(hour, metrics),
+    confidence: 0.6 // Lower confidence for future prediction
+  };
 }
 
-function getTestMetrics(emotionalState?: string) {
-  const baseMetrics = {
+function analyzeOptimalTiming(optimalTime: Date, circadianProfile: any, emotionalState: any): any {
+  const hour = optimalTime.getHours();
+  
+  return {
+    hour,
+    optimal_window: true,
+    circadian_alignment: calculateCircadianAlignment(hour, circadianProfile),
+    emotional_readiness: calculateEmotionalReadiness(emotionalState),
+    appropriateness: 0.9, // High since it's optimal
+    confidence: 0.9
+  };
+}
+
+function analyzeEmotionalContext(emotionalState: any, metrics: any): any {
+  return {
+    current_state: emotionalState.current_state || 'balanced',
+    stress_level: metrics.stress || 3,
+    energy_level: metrics.energy || 5,
+    mood_score: metrics.mood || 5,
+    receptivity_score: calculateReceptivityScore(emotionalState, metrics),
+    confidence: emotionalState.confidence || 0.7
+  };
+}
+
+// Utility functions
+function getTimeOfDay(date: Date): string {
+  const hour = date.getHours();
+  if (hour < 6) return 'night';
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
+
+function findOptimalDeliveryTime(category: string, circadianProfile: any, emotionalState: any): Date {
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // Use circadian profile to find optimal windows
+  const optimalWindows = circadianProfile?.optimal_intervention_windows || [];
+  
+  // Filter windows by category
+  const relevantWindows = optimalWindows.filter((window: any) => {
+    if (category === 'stress_relief') return window.intervention_type === 'stress_relief';
+    if (category === 'energy_boost') return window.intervention_type === 'energy_boost';
+    return window.intervention_type === 'mindfulness';
+  });
+  
+  if (relevantWindows.length > 0) {
+    const bestWindow = relevantWindows[0];
+    const targetHour = bestWindow.start_hour;
+    
+    const optimalTime = new Date(now);
+    optimalTime.setHours(targetHour, 0, 0, 0);
+    
+    // If the time has passed today, schedule for tomorrow
+    if (optimalTime <= now) {
+      optimalTime.setDate(optimalTime.getDate() + 1);
+    }
+    
+    return optimalTime;
+  }
+  
+  // Fallback: find next good hour based on energy peaks
+  const peakEnergyHours = circadianProfile?.peak_energy_hours || [9, 10, 15, 16];
+  const nextPeakHour = peakEnergyHours.find((h: number) => h > currentHour) || peakEnergyHours[0];
+  
+  const fallbackTime = new Date(now);
+  fallbackTime.setHours(nextPeakHour, 0, 0, 0);
+  
+  if (fallbackTime <= now) {
+    fallbackTime.setDate(fallbackTime.getDate() + 1);
+  }
+  
+  return fallbackTime;
+}
+
+function calculateAppropriatenessScore(category: string, emotionalState: any, timingAnalysis: any): number {
+  let score = 0.5;
+  
+  // Category-state alignment
+  const state = emotionalState.current_state || 'balanced';
+  if (category === 'stress_relief' && state === 'stressed') score += 0.3;
+  if (category === 'energy_boost' && (state === 'tired' || state === 'low_energy')) score += 0.3;
+  if (category === 'celebration' && (state === 'motivated' || state === 'energetic')) score += 0.3;
+  
+  // Timing appropriateness
+  score += timingAnalysis.appropriateness * 0.2;
+  
+  return Math.min(score, 1.0);
+}
+
+function calculatePersonalizationScore(message: string, emotionalState: any, metrics: any): number {
+  let score = 0.6; // Base personalization
+  
+  // Check if message acknowledges current state
+  const state = emotionalState.current_state || 'balanced';
+  if (message.toLowerCase().includes(state)) score += 0.2;
+  
+  // Check stress/energy awareness
+  if (metrics.stress >= 6 && message.toLowerCase().includes('stress')) score += 0.1;
+  if (metrics.energy <= 3 && message.toLowerCase().includes('energia')) score += 0.1;
+  
+  return Math.min(score, 1.0);
+}
+
+function calculateEngagementPrediction(category: string, timingAnalysis: any, emotionalContext: any): number {
+  let engagement = 0.5;
+  
+  // Timing factor
+  engagement += timingAnalysis.appropriateness * 0.3;
+  
+  // Emotional readiness
+  engagement += emotionalContext.receptivity_score * 0.2;
+  
+  return Math.min(engagement, 1.0);
+}
+
+function calculateTimeAppropriateness(hour: number, metrics: any): number {
+  // Avoid very early/late hours
+  if (hour < 6 || hour > 22) return 0.2;
+  if (hour < 8 || hour > 20) return 0.5;
+  
+  // Peak hours are good
+  if (hour >= 9 && hour <= 11) return 0.9;
+  if (hour >= 15 && hour <= 17) return 0.8;
+  
+  return 0.7;
+}
+
+function calculateReceptivityScore(emotionalState: any, metrics: any): number {
+  const stress = metrics.stress || 3;
+  const energy = metrics.energy || 5;
+  
+  // Lower stress and moderate energy = higher receptivity
+  let score = 0.5;
+  if (stress <= 4) score += 0.2;
+  if (energy >= 4 && energy <= 7) score += 0.2;
+  
+  return Math.min(score, 1.0);
+}
+
+function calculateCircadianAlignment(hour: number, circadianProfile: any): number {
+  const peakHours = circadianProfile?.peak_energy_hours || [9, 10, 11, 15, 16];
+  return peakHours.includes(hour) ? 0.9 : 0.5;
+}
+
+function calculateEmotionalReadiness(emotionalState: any): number {
+  // Higher readiness for balanced states
+  const state = emotionalState.current_state || 'balanced';
+  const readinessMap: { [key: string]: number } = {
+    balanced: 0.9,
+    motivated: 0.8,
+    energetic: 0.7,
+    tired: 0.5,
+    stressed: 0.4,
+    anxious: 0.3
+  };
+  
+  return readinessMap[state] || 0.6;
+}
+
+function predictEnergyAtTime(hour: number): number {
+  // Simple energy prediction based on typical patterns
+  if (hour >= 9 && hour <= 11) return 7;
+  if (hour >= 15 && hour <= 17) return 6;
+  if (hour >= 13 && hour <= 14) return 4; // Post-lunch dip
+  return 5;
+}
+
+function predictStressAtTime(hour: number): number {
+  // Simple stress prediction
+  if (hour >= 11 && hour <= 12) return 6; // Pre-lunch stress
+  if (hour >= 17 && hour <= 18) return 7; // End of workday
+  return 3;
+}
+
+// Default data functions
+function getDefaultMetrics() {
+  return {
     mood: 5,
     stress: 3,
     energy: 5,
     sleep_hours: 7,
-    steps: 5000,
-    date: new Date().toISOString()
+    steps: 5000
   };
-  
-  // Adjust based on test emotional state
-  switch (emotionalState) {
-    case 'stressed':
-      return { ...baseMetrics, mood: 3, stress: 7, energy: 3 };
-    case 'energetic':
-      return { ...baseMetrics, mood: 7, stress: 2, energy: 8, steps: 8000 };
-    case 'tired':
-      return { ...baseMetrics, mood: 4, stress: 4, energy: 2, sleep_hours: 5 };
-    case 'anxious':
-      return { ...baseMetrics, mood: 3, stress: 6, energy: 4 };
-    case 'motivated':
-      return { ...baseMetrics, mood: 7, stress: 2, energy: 7, steps: 7000 };
-    case 'balanced':
-    default:
-      return baseMetrics;
-  }
 }
 
-function getTestLifeScore(emotionalState?: string) {
-  const baseScore = {
+function getDefaultLifeScore() {
+  return {
     score: 65,
     breakdown: {
       sleep_score: 70,
       activity_score: 60,
       mental_score: 65
-    },
-    date: new Date().toISOString()
+    }
   };
-  
-  // Adjust based on test emotional state
-  switch (emotionalState) {
-    case 'stressed':
-      return { 
-        ...baseScore, 
-        score: 45, 
-        breakdown: { ...baseScore.breakdown, mental_score: 35, sleep_score: 50 } 
-      };
-    case 'energetic':
-      return { 
-        ...baseScore, 
-        score: 80, 
-        breakdown: { ...baseScore.breakdown, activity_score: 85, mental_score: 80 } 
-      };
-    case 'tired':
-      return { 
-        ...baseScore, 
-        score: 50, 
-        breakdown: { ...baseScore.breakdown, sleep_score: 35, activity_score: 45 } 
-      };
-    case 'anxious':
-      return { 
-        ...baseScore, 
-        score: 40, 
-        breakdown: { ...baseScore.breakdown, mental_score: 30 } 
-      };
-    case 'motivated':
-      return { 
-        ...baseScore, 
-        score: 85, 
-        breakdown: { ...baseScore.breakdown, mental_score: 85, activity_score: 80 } 
-      };
-    case 'balanced':
-    default:
-      return baseScore;
-  }
 }
 
-function getTestUserProfile() {
+function getDefaultEmotionalState() {
   return {
-    chronotype: 'intermediate',
-    timezone: 'Europe/Rome',
-    language_preference: 'it',
-    wellness_goals: ['stress_management', 'better_sleep'],
-    activity_level: 'moderate'
+    current_state: 'balanced',
+    confidence: 0.7,
+    factors: ['moderate_stress', 'adequate_energy']
   };
 }
 
-function getTestCircadianProfile() {
+function getDefaultCircadianProfile() {
   return {
     chronotype: 'intermediate',
     natural_wake_time: '07:00',
     natural_sleep_time: '23:00',
     peak_energy_hours: [9, 10, 11, 15, 16],
     low_energy_hours: [13, 14, 20, 21],
-    stress_peak_hours: [11, 17, 18],
+    stress_peak_hours: [11, 17],
     optimal_intervention_windows: [
       {
         start_hour: 9,
         end_hour: 11,
-        effectiveness_score: 0.85,
+        effectiveness_score: 0.7,
         intervention_type: 'mindfulness',
         frequency_limit: 1
-      },
-      {
-        start_hour: 14,
-        end_hour: 16,
-        effectiveness_score: 0.78,
-        intervention_type: 'energy_boost',
-        frequency_limit: 1
-      },
-      {
-        start_hour: 17,
-        end_hour: 19,
-        effectiveness_score: 0.92,
-        intervention_type: 'stress_relief',
-        frequency_limit: 2
       }
     ]
-  };
-}
-
-function getTestPreferences() {
-  return {
-    enabled: true,
-    categories: {
-      stress_relief: true,
-      energy_boost: true,
-      sleep_prep: true,
-      celebration: true,
-      emergency: true
-    },
-    quiet_hours: {
-      enabled: true,
-      start_time: '22:00',
-      end_time: '07:00'
-    },
-    frequency_limits: {
-      max_daily: 5,
-      min_gap_minutes: 90,
-      respect_dnd: true
-    },
-    delivery_channels: {
-      push_notifications: true,
-      in_app_only: false,
-      email_backup: false
-    },
-    tone_preference: 'adaptive'
   };
 }

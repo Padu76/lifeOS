@@ -21,3 +21,5 @@ dist
 .env.*
 .supabase
 supabase/.temp/
+
+.vercel

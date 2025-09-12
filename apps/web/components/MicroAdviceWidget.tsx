@@ -16,16 +16,34 @@ interface MicroAdvice {
   expires_at: string;
 }
 
+interface DashboardData {
+  current_life_score: {
+    stress: number;
+    energy: number;
+    sleep: number;
+    overall: number;
+    last_updated: string;
+  };
+  metrics?: Array<{
+    label: string;
+    value: number;
+    trend: 'up' | 'down' | 'stable';
+    change: number;
+  }>;
+}
+
 interface MicroAdviceWidgetProps {
   className?: string;
   maxAdvices?: number;
   autoRefresh?: boolean;
+  dashboardData?: DashboardData;
 }
 
 export default function MicroAdviceWidget({
   className = '',
   maxAdvices = 2,
-  autoRefresh = true
+  autoRefresh = true,
+  dashboardData
 }: MicroAdviceWidgetProps) {
   const [advices, setAdvices] = useState<MicroAdvice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,10 +51,19 @@ export default function MicroAdviceWidget({
   const [interacting, setInteracting] = useState<number | null>(null);
   const [user, setUser] = useState<any>(null);
 
+  // DEBUG: Controlla cosa riceve il widget
+  console.log('🔍 Widget debug:', { 
+    user: user ? user.id : 'null', 
+    dashboardData: dashboardData ? 'received' : 'null',
+    dashboardData_details: dashboardData 
+  });
+
   // Carica utente corrente
   useEffect(() => {
     const loadUser = async () => {
+      console.log('🔍 Loading user...');
       const currentUser = await getCurrentUser();
+      console.log('🔍 User loaded:', currentUser ? currentUser.id : 'null');
       setUser(currentUser);
       if (!currentUser) {
         setError('Utente non autenticato');
@@ -47,69 +74,108 @@ export default function MicroAdviceWidget({
   }, []);
 
   const loadMicroAdvices = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('🔍 No user - skipping API call');
+      return;
+    }
+    
+    console.log('🔍 Starting API call - user and dashboardData check:', {
+      hasUser: !!user,
+      hasDashboardData: !!dashboardData
+    });
     
     setLoading(true);
     setError(null);
     
     try {
-      console.log('Calling generate-micro-advice Edge Function...');
+      console.log('🔍 Calling generate-micro-advice Edge Function with dashboard data...');
       
-      // Chiamata alla Edge Function per generare consigli personalizzati
-      const data = await callEdgeFunction('generate-micro-advice', {
-        user_id: user.id,
-        max_count: maxAdvices,
+      // Prepara i parametri corretti per la Edge Function
+      const currentLifeScore = dashboardData?.current_life_score || {
+        stress: 5,
+        energy: 5,
+        sleep: 5,
+        overall: 5
+      };
+
+      const currentMetrics = {
+        timestamp: new Date().toISOString(),
+        stress_level: currentLifeScore.stress,
+        energy_level: currentLifeScore.energy,
+        sleep_quality: currentLifeScore.sleep,
+        mood: currentLifeScore.overall >= 7 ? 'positive' : 
+              currentLifeScore.overall >= 4 ? 'neutral' : 'low',
         context: {
-          current_time: new Date().toISOString(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          time_of_day: new Date().getHours()
         }
+      };
+
+      console.log('🔍 Sending parameters:', {
+        current_metrics: currentMetrics,
+        current_life_score: currentLifeScore,
+        force_immediate: false,
+        preferred_category: null
+      });
+      
+      // Chiamata alla Edge Function con parametri corretti
+      const data = await callEdgeFunction('generate-micro-advice', {
+        current_metrics: currentMetrics,
+        current_life_score: currentLifeScore,
+        force_immediate: false,
+        preferred_category: null
       });
 
-      console.log('Edge Function response:', data);
+      console.log('🔍 Edge Function response:', data);
       
-      if (data && data.advice) {
-        setAdvices(data.advice.slice(0, maxAdvices));
+      if (data && data.success && data.data) {
+        // Converte la risposta della Edge Function nel formato atteso dal widget
+        const advice = data.data;
+        const formattedAdvice: MicroAdvice = {
+          id: Math.random(),
+          message: advice.advice.content,
+          action: advice.advice.content,
+          duration_minutes: 5, // Default
+          priority: Math.floor(advice.advice.personalization_score * 5),
+          tone: mapToneFromAPI(advice.advice.tone),
+          timing_optimal: advice.timing.confidence_score > 0.7,
+          suggestion_key: advice.advice.template_id,
+          generated_at: new Date().toISOString(),
+          expires_at: advice.next_advice_eta || new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+        };
+        
+        console.log('🔍 Formatted advice:', formattedAdvice);
+        setAdvices([formattedAdvice]);
       } else {
+        console.log('🔍 No advice generated or API returned empty response');
         setAdvices([]);
       }
       
     } catch (err: any) {
-      console.error('Error loading micro advices:', err);
+      console.error('🔍 Error loading micro advices:', err);
       setError(err.message || 'Errore nel caricamento dei consigli');
-      
-      // Fallback: usa mock data se l'API fallisce
-      const mockAdvices: MicroAdvice[] = [
-        {
-          id: 1,
-          message: "I tuoi livelli di energia sembrano bassi oggi. Una breve sessione di respirazione può aiutarti a ricentrarti e ritrovare focus.",
-          action: "Prova la respirazione 4-7-8 per 5 minuti",
-          duration_minutes: 5,
-          priority: 4,
-          tone: 'supportive',
-          timing_optimal: true,
-          suggestion_key: 'breathing-exercise',
-          generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: 2,
-          message: "Una breve camminata all'aria aperta può aumentare la tua energia e migliorare l'umore.",
-          action: "Fai una camminata di 10 minuti all'aria aperta",
-          duration_minutes: 10,
-          priority: 3,
-          tone: 'encouraging',
-          timing_optimal: true,
-          suggestion_key: '10min-walk',
-          generated_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
-        }
-      ];
-      
-      setAdvices(mockAdvices.slice(0, maxAdvices));
+      setAdvices([]);
     } finally {
       setLoading(false);
     }
-  }, [maxAdvices, user]);
+  }, [maxAdvices, user, dashboardData]);
+
+  // Mappa il tone dall'API al formato del widget
+  const mapToneFromAPI = (apiTone: string): MicroAdvice['tone'] => {
+    switch (apiTone) {
+      case 'warm':
+      case 'supportive':
+        return 'supportive';
+      case 'encouraging':
+        return 'encouraging';
+      case 'gentle':
+        return 'gentle';
+      case 'celebratory':
+        return 'celebratory';
+      default:
+        return 'gentle';
+    }
+  };
 
   const updateAdviceStatus = async (adviceId: number, status: string) => {
     if (!user) return;
@@ -122,7 +188,7 @@ export default function MicroAdviceWidget({
       // Chiamata alla Edge Function per gestire la risposta
       await callEdgeFunction('handle-advice-response', {
         user_id: user.id,
-        advice_id: adviceId,
+        advice_id: adviceId.toString(),
         response_type: status,
         timestamp: new Date().toISOString()
       });
@@ -147,7 +213,14 @@ export default function MicroAdviceWidget({
   };
 
   useEffect(() => {
-    if (user) {
+    console.log('🔍 useEffect triggered:', { 
+      hasUser: !!user, 
+      hasDashboardData: !!dashboardData,
+      willCallAPI: !!(user && dashboardData)
+    });
+    
+    if (user && dashboardData) {
+      console.log('🔍 Conditions met - calling loadMicroAdvices');
       loadMicroAdvices();
 
       // Auto refresh ogni 30 minuti se abilitato
@@ -155,8 +228,13 @@ export default function MicroAdviceWidget({
         const interval = setInterval(loadMicroAdvices, 30 * 60 * 1000);
         return () => clearInterval(interval);
       }
+    } else {
+      console.log('🔍 Conditions not met:', {
+        user: user ? 'present' : 'missing',
+        dashboardData: dashboardData ? 'present' : 'missing'
+      });
     }
-  }, [loadMicroAdvices, autoRefresh, user]);
+  }, [loadMicroAdvices, autoRefresh, user, dashboardData]);
 
   const getToneStyles = (tone: string) => {
     switch (tone) {
@@ -248,7 +326,7 @@ export default function MicroAdviceWidget({
     );
   }
 
-  if (advices.length === 0) {
+  if (advices.length === 0 && !loading) {
     return (
       <div className={`p-6 text-center ${className}`}>
         <div className="text-3xl mb-2">🌟</div>
@@ -272,9 +350,9 @@ export default function MicroAdviceWidget({
         <div className="flex items-center gap-3">
           <Lightbulb className="w-6 h-6 text-blue-400" />
           <h3 className="text-xl font-bold text-white">Consigli AI Personalizzati</h3>
-          {error && (
+          {!dashboardData && (
             <div className="text-xs text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">
-              Fallback attivo
+              Dati mancanti
             </div>
           )}
         </div>

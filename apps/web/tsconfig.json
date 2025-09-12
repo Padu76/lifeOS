@@ -35,7 +35,8 @@
       "@lifeos/screens": ["../../packages/screens"],
       "@lifeos/screens/*": ["../../packages/screens/*"],
       "@lifeos/shared": ["../../packages/shared"],
-      "@lifeos/shared/*": ["../../packages/shared/*"]
+      "@lifeos/shared/*": ["../../packages/shared/*"],
+      "@shared/*": ["../../packages/shared/*"]
     },
     "plugins": [
       {

@@ -109,9 +109,24 @@ async function getUserIdFromRequest(request: NextRequest): Promise<string | null
   
   try {
     const token = authHeader.replace('Bearer ', '');
-    // Implement your JWT verification here
-    return 'user_123'; // Mock for development
+    
+    // Get Supabase client for auth verification
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    // Verify JWT token
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Auth verification failed:', error);
+      return null;
+    }
+    
+    return user.id;
   } catch (error) {
+    console.error('Error verifying auth token:', error);
     return null;
   }
 }

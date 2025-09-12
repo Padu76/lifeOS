@@ -1,5 +1,295 @@
-import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX, Settings } from 'lucide-react';
+
+// TTS Types inline
+interface TTSConfig {
+  voice?: SpeechSynthesisVoice | null;
+  rate: number;
+  pitch: number;
+  volume: number;
+  lang: string;
+}
+
+interface TTSState {
+  isSupported: boolean;
+  isLoading: boolean;
+  isPlaying: boolean;
+  isPaused: boolean;
+  currentText: string;
+  availableVoices: SpeechSynthesisVoice[];
+  error: string | null;
+  userHasInteracted: boolean;
+}
+
+const DEFAULT_TTS_CONFIG: TTSConfig = {
+  voice: null,
+  rate: 0.9,
+  pitch: 1.0,
+  volume: 0.8,
+  lang: 'it-IT'
+};
+
+// TTS Hook inline
+const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
+  const [config, setConfig] = useState<TTSConfig>({ ...DEFAULT_TTS_CONFIG, ...initialConfig });
+  const [state, setState] = useState<TTSState>({
+    isSupported: false,
+    isLoading: false,
+    isPlaying: false,
+    isPaused: false,
+    currentText: '',
+    availableVoices: [],
+    error: null,
+    userHasInteracted: false
+  });
+
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Initialize TTS support and voices
+  useEffect(() => {
+    const checkSupport = () => {
+      const isSupported = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+      
+      setState(prev => ({ 
+        ...prev, 
+        isSupported,
+        error: isSupported ? null : 'Text-to-Speech non supportato su questo dispositivo'
+      }));
+
+      if (isSupported) {
+        loadVoices();
+      }
+    };
+
+    const loadVoices = () => {
+      const voices = speechSynthesis.getVoices();
+      
+      if (voices.length === 0) {
+        return;
+      }
+      
+      setState(prev => ({ ...prev, availableVoices: voices }));
+
+      if (config.voice) {
+        return;
+      }
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        console.log('iOS Voices loading attempt, found:', voices.length);
+        console.log('iOS Voices available:', voices.map(v => `${v.name} (${v.lang})`));
+      }
+
+      let preferredVoice: SpeechSynthesisVoice | undefined;
+      
+      if (isIOS) {
+        const candidates = [
+          voices.find(voice => voice.name.toLowerCase().includes('alice') && voice.lang === 'it-IT'),
+          voices.find(voice => voice.name.toLowerCase().includes('alice')),
+          voices.find(voice => voice.lang === 'it-IT' && !voice.name.toLowerCase().includes('en')),
+          voices.find(voice => voice.lang.startsWith('it-') && !voice.name.toLowerCase().includes('en')),
+          voices.find(voice => voice.lang.startsWith('it')),
+          voices.find(voice => voice.name.toLowerCase().includes('italian'))
+        ];
+        
+        preferredVoice = candidates.find(voice => voice !== undefined);
+        
+        if (preferredVoice) {
+          console.log('iOS Auto-selecting voice:', preferredVoice.name, preferredVoice.lang);
+          setConfig(prev => ({ ...prev, voice: preferredVoice }));
+        } else {
+          console.log('iOS No Italian voice found, available:', voices.slice(0, 5).map(v => `${v.name} (${v.lang})`));
+        }
+      } else {
+        preferredVoice = voices.find(voice => 
+          voice.name.toLowerCase().includes('google') && voice.lang.startsWith('it')
+        );
+        
+        if (!preferredVoice) {
+          preferredVoice = voices.find(voice => 
+            voice.lang === 'it-IT' || voice.lang.startsWith('it')
+          );
+        }
+        
+        if (preferredVoice) {
+          setConfig(prev => ({ ...prev, voice: preferredVoice }));
+        }
+      }
+    };
+
+    checkSupport();
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) {
+      const intervals = [100, 300, 500, 1000, 2000];
+      intervals.forEach(delay => {
+        setTimeout(() => {
+          console.log(`iOS voice loading attempt after ${delay}ms`);
+          loadVoices();
+        }, delay);
+      });
+    }
+
+    return () => {
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const markUserInteraction = useCallback(() => {
+    setState(prev => ({ ...prev, userHasInteracted: true }));
+  }, []);
+
+  const createUtterance = useCallback((text: string): SpeechSynthesisUtterance => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    utterance.voice = config.voice || null;
+    utterance.rate = config.rate;
+    utterance.pitch = config.pitch;
+    utterance.volume = config.volume;
+    utterance.lang = config.lang;
+
+    return utterance;
+  }, [config]);
+
+  const speakText = useCallback((
+    text: string, 
+    callbacks?: {
+      onStart?: () => void;
+      onEnd?: () => void;
+      onError?: (error: string) => void;
+    }
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!state.isSupported) {
+        const error = 'Text-to-Speech non supportato';
+        callbacks?.onError?.(error);
+        reject(new Error(error));
+        return;
+      }
+
+      if (!state.userHasInteracted) {
+        const error = 'Interazione utente richiesta. Tocca un pulsante per iniziare.';
+        setState(prev => ({ ...prev, error }));
+        callbacks?.onError?.(error);
+        reject(new Error(error));
+        return;
+      }
+
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+      }
+
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: true, 
+        currentText: text,
+        error: null 
+      }));
+
+      const utterance = createUtterance(text);
+      utteranceRef.current = utterance;
+
+      utterance.onstart = () => {
+        setState(prev => ({ 
+          ...prev, 
+          isLoading: false, 
+          isPlaying: true,
+          isPaused: false 
+        }));
+        callbacks?.onStart?.();
+      };
+
+      utterance.onend = () => {
+        setState(prev => ({ 
+          ...prev, 
+          isPlaying: false,
+          isPaused: false,
+          currentText: '' 
+        }));
+        callbacks?.onEnd?.();
+        resolve();
+      };
+
+      utterance.onerror = (event) => {
+        const errorMsg = `TTS Error: ${event.error}`;
+        setState(prev => ({ 
+          ...prev, 
+          isLoading: false,
+          isPlaying: false,
+          isPaused: false,
+          error: errorMsg 
+        }));
+        callbacks?.onError?.(errorMsg);
+        reject(new Error(errorMsg));
+      };
+
+      utterance.onpause = () => {
+        setState(prev => ({ ...prev, isPaused: true }));
+      };
+
+      utterance.onresume = () => {
+        setState(prev => ({ ...prev, isPaused: false }));
+      };
+
+      try {
+        speechSynthesis.speak(utterance);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'TTS failed to start';
+        setState(prev => ({ 
+          ...prev, 
+          isLoading: false,
+          error: errorMsg 
+        }));
+        callbacks?.onError?.(errorMsg);
+        reject(new Error(errorMsg));
+      }
+    });
+  }, [state.isSupported, state.userHasInteracted, createUtterance]);
+
+  const stop = useCallback(() => {
+    speechSynthesis.cancel();
+    setState(prev => ({ 
+      ...prev, 
+      isPlaying: false,
+      isPaused: false,
+      isLoading: false,
+      currentText: '' 
+    }));
+  }, []);
+
+  const updateConfig = useCallback((newConfig: Partial<TTSConfig>) => {
+    setConfig(prev => ({ ...prev, ...newConfig }));
+  }, []);
+
+  const speakCoachingMessage = useCallback(async (
+    message: string,
+    onComplete?: () => void
+  ) => {
+    await speakText(message, {
+      onEnd: onComplete
+    });
+  }, [speakText]);
+
+  return {
+    ...state,
+    config,
+    speak: speakText,
+    stop,
+    markUserInteraction,
+    updateConfig,
+    speakCoachingMessage,
+    canSpeak: state.isSupported && state.userHasInteracted,
+    isActive: state.isPlaying || state.isLoading
+  };
+};
 
 interface VirtualWalkingCoachProps {
   onComplete?: () => void;
@@ -9,11 +299,25 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   const [isActive, setIsActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<'preparation' | 'warmup' | 'steady_pace' | 'energetic' | 'mindful' | 'cooldown' | 'completed'>('preparation');
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   const [stepCount, setStepCount] = useState(0);
   const [achievements, setAchievements] = useState<string[]>([]);
   const [currentMilestone, setCurrentMilestone] = useState<string | null>(null);
   
+  // TTS Integration
+  const {
+    speakCoachingMessage,
+    markUserInteraction,
+    canSpeak,
+    isActive: ttsIsActive,
+    stop: stopTTS,
+    config,
+    updateConfig,
+    availableVoices,
+    error: ttsError
+  } = useTTSInline();
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const totalDuration = 600; // 10 minuti
 
@@ -129,11 +433,9 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
           if (newPhase !== currentPhase) {
             setCurrentPhase(newPhase);
 
-            if (audioEnabled && 'speechSynthesis' in window) {
+            if (audioEnabled && canSpeak) {
               const message = getCoachingMessage(newPhase, 0);
-              const utterance = new SpeechSynthesisUtterance(message);
-              utterance.rate = 0.9;
-              speechSynthesis.speak(utterance);
+              speakCoachingMessage(message);
             }
           }
 
@@ -142,6 +444,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
           if (newTime >= totalDuration) {
             setIsActive(false);
             setCurrentPhase('completed');
+            stopTTS();
             onComplete?.();
             return totalDuration;
           }
@@ -160,10 +463,15 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
         clearInterval(intervalRef.current);
       }
     };
-  }, [isActive, currentPhase, audioEnabled, stepCount, onComplete]);
+  }, [isActive, currentPhase, audioEnabled, stepCount, onComplete, canSpeak, speakCoachingMessage, stopTTS]);
 
   const togglePlay = () => {
+    markUserInteraction();
     setIsActive(!isActive);
+    
+    if (isActive) {
+      stopTTS();
+    }
   };
 
   const reset = () => {
@@ -173,11 +481,15 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     setStepCount(0);
     setAchievements([]);
     setCurrentMilestone(null);
+    stopTTS();
   };
 
-  const toggleAudio = () => {
-    setAudioEnabled(!audioEnabled);
-  };
+  const toggleAudio = useCallback(() => {
+    setAudioEnabled(prev => !prev);
+    if (!audioEnabled) {
+      markUserInteraction();
+    }
+  }, [audioEnabled, markUserInteraction]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -210,6 +522,98 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
           ))}
         </div>
       </div>
+
+      {/* Header con controlli audio */}
+      <div className="flex justify-between items-center mb-6 relative z-10">
+        <div className="w-20" />
+        <h2 className="text-2xl font-bold text-white">Coach Virtuale</h2>
+        <div className="flex items-center gap-2">
+          {/* Audio Toggle */}
+          <button
+            onClick={toggleAudio}
+            className={`p-2 rounded-lg font-semibold hover:scale-105 transition-transform 
+                       ${audioEnabled ? 'bg-green-500 text-white' : 'bg-gray-500 text-gray-300'}`}
+            title={audioEnabled ? 'Audio abilitato' : 'Audio disabilitato'}
+          >
+            {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Settings */}
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="bg-gray-600 text-white p-2 rounded-lg font-semibold hover:scale-105 transition-transform"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Audio Warning for iOS */}
+      {!canSpeak && audioEnabled && (
+        <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-6 relative z-10">
+          <p className="text-yellow-200 text-sm text-center">
+            Tocca "Play" per abilitare il coaching vocale
+          </p>
+        </div>
+      )}
+
+      {/* TTS Error */}
+      {ttsError && (
+        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mb-6 relative z-10">
+          <p className="text-red-200 text-sm text-center">{ttsError}</p>
+        </div>
+      )}
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8 border border-white/20 relative z-10">
+          <h3 className="text-white text-lg font-semibold mb-4">Impostazioni Coach</h3>
+          
+          {/* Voice Selection */}
+          {audioEnabled && availableVoices.length > 0 && (
+            <div className="mb-4">
+              <label className="block text-white text-sm font-medium mb-2">
+                Voce del Coach
+              </label>
+              <select
+                value={config.voice?.name || ''}
+                onChange={(e) => {
+                  const voice = availableVoices.find(v => v.name === e.target.value);
+                  updateConfig({ voice });
+                }}
+                className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg"
+              >
+                <option value="">Voce predefinita</option>
+                {availableVoices
+                  .filter(voice => voice.lang.startsWith('it') || voice.lang.startsWith('en'))
+                  .map((voice) => (
+                  <option key={voice.name} value={voice.name}>
+                    {voice.name} ({voice.lang})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Speech Rate */}
+          {audioEnabled && (
+            <div className="mb-4">
+              <label className="block text-white text-sm font-medium mb-2">
+                Velocità voce: {config.rate.toFixed(1)}x
+              </label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={config.rate}
+                onChange={(e) => updateConfig({ rate: parseFloat(e.target.value) })}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Visualizzazione centrale del cammino */}
       <div className="flex justify-center relative z-10">
@@ -328,6 +732,14 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
           <div className="text-xs text-white/40 uppercase tracking-wider">
             {currentPhaseData.title} • {Math.ceil((currentPhaseData.end - currentPhaseData.start - timeInPhase) / 60)} min rimanenti
           </div>
+          
+          {audioEnabled && (
+            <div className="mt-4 p-3 bg-green-500/20 rounded-lg">
+              <p className="text-green-200 text-sm">
+                Il coach vocale ti guiderà attraverso ogni fase
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -355,17 +767,6 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
         >
           <RotateCcw size={24} />
         </button>
-        
-        <button
-          onClick={toggleAudio}
-          className={`flex items-center justify-center w-16 h-16 rounded-full transition-all duration-300 hover:scale-110 backdrop-blur-lg border border-white/20 ${
-            audioEnabled ? 
-              'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg' : 
-              'bg-white/10 hover:bg-white/20 text-white/60'
-          }`}
-        >
-          {audioEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
-        </button>
       </div>
 
       {/* Messaggio finale */}
@@ -378,6 +779,22 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
               <p className="text-green-200/80 text-sm">
                 Hai completato {Math.round(stepCount)} passi e bruciato circa {estimatedCalories} calorie. Il tuo corpo e la tua mente ti ringraziano!
               </p>
+              
+              <div className="mt-4 flex gap-2">
+                <a
+                  href="/suggestions"
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all border border-white/20 text-sm"
+                >
+                  Altre Suggestions
+                </a>
+                
+                <a
+                  href="/dashboard"
+                  className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-bold hover:scale-105 transition-transform text-sm"
+                >
+                  Dashboard
+                </a>
+              </div>
             </div>
           </div>
         </div>

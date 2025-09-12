@@ -3,7 +3,7 @@ import { EnhancedBreathingExperience } from '../components/EnhancedBreathingExpe
 import { GuidedMeditationSystem } from '../components/GuidedMeditationSystem';
 import { VirtualWalkingCoach } from '../components/VirtualWalkingCoach';
 import { HydrationGuide } from '../components/HydrationGuide';
-import { ModernBreathing478 } from '../components/ModernBreathing478';
+import ModernBreathing478 from '../components/ModernBreathing478';
 import { PowerNapGuide } from '../components/PowerNapGuide';
 import { StretchingSequence } from '../components/StretchingSequence';
 import { EnergyBoostSession } from '../components/EnergyBoostSession';
@@ -19,18 +19,6 @@ export const suggestions = {
       <div className="text-center space-y-6">
         <div className="text-6xl mb-4">☕</div>
         <p className="text-lg text-white/80">Fermati, respira e ricaricati</p>
-      </div>
-    )
-  },
-  'drink-water': {
-    title: 'Bevi acqua',
-    description: 'Mantieni il corpo idratato per il benessere',
-    icon: Droplets,
-    gradient: 'from-cyan-400 to-blue-600',
-    component: () => (
-      <div className="text-center space-y-6">
-        <div className="text-6xl mb-4">💧</div>
-        <p className="text-lg text-white/80">Il tuo corpo ha bisogno di idratazione</p>
       </div>
     )
   },

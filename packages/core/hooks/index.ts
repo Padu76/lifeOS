@@ -13,6 +13,9 @@ export { useUserPreferences } from './useUserPreferences';
 export { useSystemAnalytics } from './useSystemAnalytics';
 export { useUserInitialization } from './useUserInitialization';
 
+// TTS hook for guided suggestions
+export { useTTS } from './useTTS';
+
 // Re-export types for convenience - NO DUPLICATES
 export type {
   // From useMicroAdvice only
@@ -53,3 +56,10 @@ export type {
   InitializationResult,
   InitializationProgress
 } from './useUserInitialization';
+
+export type {
+  // From useTTS
+  TTSConfig,
+  TTSState,
+  TTSQueueItem
+} from './useTTS';
