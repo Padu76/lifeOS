@@ -349,7 +349,7 @@ export default function MicroAdviceWidget({
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Lightbulb className="w-6 h-6 text-blue-400" />
-          <h3 className="text-xl font-bold text-white">Consigli AI Personalizzati</h3>
+          <h3 className="text-xl font-bold text-white">Consigli AI Personalizzati - DEBUG VERSION</h3>
           {!dashboardData && (
             <div className="text-xs text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">
               Dati mancanti
