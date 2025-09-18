@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight, Menu, X, ArrowLeft } from 'lucide-react';
-import MicroAdviceWidget from '../../components/MicroAdviceWidget';
+import MicroAdviceWidget2 from '../../components/MicroAdviceWidget2';
 import { supabase, callEdgeFunction } from '../../lib/supabase';
 
 interface MetricData {
@@ -551,10 +551,10 @@ const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* MicroAdvice Widget with Dashboard Data */}
+      {/* MicroAdvice Widget with Dashboard Data - Using MicroAdviceWidget2 for DEBUG */}
       <section className="relative py-6 sm:py-8 lg:py-12 px-4 sm:px-6">
         <div className="container mx-auto max-w-6xl">
-          <MicroAdviceWidget 
+          <MicroAdviceWidget2 
             className="bg-white/5 backdrop-blur-lg rounded-3xl p-4 sm:p-6 lg:p-8 border border-white/10"
             maxAdvices={2}
             autoRefresh={true}
