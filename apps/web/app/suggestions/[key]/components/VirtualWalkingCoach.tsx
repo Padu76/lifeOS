@@ -77,11 +77,6 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       }
 
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (isIOS) {
-        console.log('iOS Voices loading attempt, found:', voices.length);
-        console.log('iOS Voices available:', voices.map(v => `${v.name} (${v.lang})`));
-      }
-
       let preferredVoice: SpeechSynthesisVoice | undefined;
       
       if (isIOS) {
@@ -97,10 +92,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
         preferredVoice = candidates.find(voice => voice !== undefined);
         
         if (preferredVoice) {
-          console.log('iOS Auto-selecting voice:', preferredVoice.name, preferredVoice.lang);
           setConfig(prev => ({ ...prev, voice: preferredVoice }));
-        } else {
-          console.log('iOS No Italian voice found, available:', voices.slice(0, 5).map(v => `${v.name} (${v.lang})`));
         }
       } else {
         preferredVoice = voices.find(voice => 
@@ -130,7 +122,6 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       const intervals = [100, 300, 500, 1000, 2000];
       intervals.forEach(delay => {
         setTimeout(() => {
-          console.log(`iOS voice loading attempt after ${delay}ms`);
           loadVoices();
         }, delay);
       });
@@ -298,12 +289,13 @@ interface VirtualWalkingCoachProps {
 export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) => {
   const [isActive, setIsActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [currentPhase, setCurrentPhase] = useState<'preparation' | 'warmup' | 'steady_pace' | 'energetic' | 'mindful' | 'cooldown' | 'completed'>('preparation');
+  const [currentPhase, setCurrentPhase] = useState<'warmup' | 'steady_pace' | 'energetic' | 'mindful' | 'cooldown' | 'completed'>('warmup');
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [stepCount, setStepCount] = useState(0);
   const [achievements, setAchievements] = useState<string[]>([]);
   const [currentMilestone, setCurrentMilestone] = useState<string | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
   
   // TTS Integration
   const {
@@ -321,12 +313,12 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const totalDuration = 600; // 10 minuti
 
+  // FASI OTTIMIZZATE - Parte subito dal riscaldamento!
   const walkingPhases = {
-    preparation: { start: 0, end: 60, title: "Preparazione", color: "from-blue-400 to-cyan-500", icon: "🏃‍♂️" },
-    warmup: { start: 60, end: 180, title: "Riscaldamento", color: "from-green-400 to-emerald-500", icon: "🌱" },
-    steady_pace: { start: 180, end: 360, title: "Passo Costante", color: "from-orange-400 to-amber-500", icon: "⚡" },
-    energetic: { start: 360, end: 480, title: "Ritmo Energico", color: "from-red-400 to-pink-500", icon: "🔥" },
-    mindful: { start: 480, end: 540, title: "Camminata Mindful", color: "from-purple-400 to-indigo-500", icon: "🧘‍♀️" },
+    warmup: { start: 0, end: 120, title: "Riscaldamento", color: "from-green-400 to-emerald-500", icon: "🌱" },
+    steady_pace: { start: 120, end: 300, title: "Passo Costante", color: "from-orange-400 to-amber-500", icon: "⚡" },
+    energetic: { start: 300, end: 420, title: "Ritmo Energico", color: "from-red-400 to-pink-500", icon: "🔥" },
+    mindful: { start: 420, end: 540, title: "Camminata Mindful", color: "from-purple-400 to-indigo-500", icon: "🧘‍♀️" },
     cooldown: { start: 540, end: 600, title: "Defaticamento", color: "from-teal-400 to-cyan-500", icon: "🌊" },
     completed: { start: 600, end: 600, title: "Completato", color: "from-emerald-400 to-green-500", icon: "🏆" }
   };
@@ -342,14 +334,8 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
 
   const getCoachingMessage = (phase: keyof typeof walkingPhases, timeInPhase: number) => {
     const messages = {
-      preparation: [
-        "Benvenuto nel tuo allenamento di camminata personalizzato!",
-        "Assicurati di avere scarpe comode e di essere idratato",
-        "Questa camminata ti darà energia e chiarezza mentale",
-        "Preparati a muoverti e a sentirti fantastico!"
-      ],
       warmup: [
-        "Inizia con un passo comodo e naturale",
+        "Iniziamo con un passo comodo e naturale. Benvenuto nella tua camminata!",
         "Senti i tuoi muscoli che si scaldano gradualmente",
         "Respira profondamente e rilassa le spalle",
         "Il tuo corpo si sta preparando per l'attività"
@@ -391,7 +377,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   };
 
   useEffect(() => {
-    if (isActive && currentPhase !== 'preparation' && currentPhase !== 'completed') {
+    if (isActive && currentPhase !== 'completed') {
       const stepsPerSecond = currentPhase === 'energetic' ? 2.2 : currentPhase === 'steady_pace' ? 2.0 : 1.8;
       setStepCount(prev => prev + stepsPerSecond);
     }
@@ -439,6 +425,13 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
             }
           }
 
+          // Messaggio ogni 30 secondi durante la fase attuale
+          if (newTime % 30 === 0 && audioEnabled && canSpeak && newPhase !== 'completed') {
+            const timeInPhase = newTime - walkingPhases[newPhase].start;
+            const message = getCoachingMessage(newPhase, timeInPhase);
+            speakCoachingMessage(message);
+          }
+
           checkAchievements(newTime, stepCount);
 
           if (newTime >= totalDuration) {
@@ -465,22 +458,38 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     };
   }, [isActive, currentPhase, audioEnabled, stepCount, onComplete, canSpeak, speakCoachingMessage, stopTTS]);
 
-  const togglePlay = () => {
+  const startWalking = () => {
     markUserInteraction();
-    setIsActive(!isActive);
+    setIsActive(true);
+    setHasStarted(true);
     
-    if (isActive) {
-      stopTTS();
+    // Messaggio iniziale immediato
+    if (audioEnabled && canSpeak) {
+      const message = "Iniziamo con un passo comodo e naturale. Benvenuto nella tua camminata!";
+      speakCoachingMessage(message);
+    }
+  };
+
+  const togglePlay = () => {
+    if (!hasStarted) {
+      startWalking();
+    } else {
+      setIsActive(!isActive);
+      
+      if (isActive) {
+        stopTTS();
+      }
     }
   };
 
   const reset = () => {
     setIsActive(false);
     setCurrentTime(0);
-    setCurrentPhase('preparation');
+    setCurrentPhase('warmup');
     setStepCount(0);
     setAchievements([]);
     setCurrentMilestone(null);
+    setHasStarted(false);
     stopTTS();
   };
 
@@ -501,7 +510,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   const estimatedCalories = Math.round((currentTime / 60) * 4.5);
   const currentPhaseData = walkingPhases[currentPhase];
   const timeInPhase = currentTime - currentPhaseData.start;
-  const currentMessage = getCoachingMessage(currentPhase, timeInPhase);
+  const currentMessage = hasStarted ? getCoachingMessage(currentPhase, timeInPhase) : "Premi Play per iniziare subito la tua camminata energizzante!";
 
   return (
     <div className="space-y-8">
@@ -632,7 +641,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
               </div>
               <div className="text-2xl font-bold">{formatTime(currentTime)}</div>
               <div className="text-sm opacity-80 mt-1">
-                {currentPhaseData.title}
+                {hasStarted ? currentPhaseData.title : "Pronto a partire"}
               </div>
             </div>
           </div>
@@ -709,7 +718,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
         <div className="flex justify-between text-sm text-white/60">
           <span>{formatTime(currentTime)}</span>
           <span className="text-xs opacity-70">
-            Coach Virtuale - {currentPhaseData.title}
+            {hasStarted ? `Coach Virtuale - ${currentPhaseData.title}` : "Coach Virtuale"}
           </span>
           <span>{formatTime(totalDuration)}</span>
         </div>
@@ -729,14 +738,16 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
           <div className="text-lg leading-relaxed text-white mb-2">
             {currentMessage}
           </div>
-          <div className="text-xs text-white/40 uppercase tracking-wider">
-            {currentPhaseData.title} • {Math.ceil((currentPhaseData.end - currentPhaseData.start - timeInPhase) / 60)} min rimanenti
-          </div>
+          {hasStarted && (
+            <div className="text-xs text-white/40 uppercase tracking-wider">
+              {currentPhaseData.title} • {Math.ceil((currentPhaseData.end - currentPhaseData.start - timeInPhase) / 60)} min rimanenti
+            </div>
+          )}
           
-          {audioEnabled && (
+          {audioEnabled && hasStarted && (
             <div className="mt-4 p-3 bg-green-500/20 rounded-lg">
               <p className="text-green-200 text-sm">
-                Il coach vocale ti guiderà attraverso ogni fase
+                Il coach vocale ti sta guidando
               </p>
             </div>
           )}
