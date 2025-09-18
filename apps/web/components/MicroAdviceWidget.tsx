@@ -234,7 +234,7 @@ export default function MicroAdviceWidget({
         dashboardData: dashboardData ? 'present' : 'missing'
       });
     }
-  }, [loadMicroAdvices, autoRefresh, user, dashboardData]);
+  }, [user?.id, dashboardData?.current_life_score?.overall, dashboardData?.current_life_score?.last_updated]);
 
   const getToneStyles = (tone: string) => {
     switch (tone) {

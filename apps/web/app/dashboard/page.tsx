@@ -1,8 +1,8 @@
-import MicroAdviceWidget from '../../components/MicroAdviceWidget';'use client';
+'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
 import { TrendingUp, Activity, Heart, Brain, Moon, Zap, Calendar, Target, Award, ChevronRight, Menu, X, ArrowLeft } from 'lucide-react';
-import MicroAdviceWidget from '../../components/MicroAdviceWidget2';
+import MicroAdviceWidget from '../../components/MicroAdviceWidget';
 import { supabase, callEdgeFunction } from '../../lib/supabase';
 
 interface MetricData {

@@ -98,16 +98,26 @@ const useAuth = () => {
     }
   };
 
-  return { user, loading, logout };
+  const getAuthRedirectUrl = () => {
+    return user ? '/dashboard' : '/sign-in';
+  };
+
+  const getAuthButtonText = () => {
+    return user ? 'Vai alla Dashboard' : 'Inizia Gratis';
+  };
+
+  return { user, loading, logout, getAuthRedirectUrl, getAuthButtonText };
 };
 
 // Mobile Menu Component
-const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void; user: any; loading: boolean; onLogout: () => void }> = ({ 
+const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void; user: any; loading: boolean; onLogout: () => void; getAuthRedirectUrl: () => string; getAuthButtonText: () => string }> = ({ 
   isOpen, 
   onClose, 
   user, 
   loading, 
-  onLogout 
+  onLogout,
+  getAuthRedirectUrl,
+  getAuthButtonText
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -180,11 +190,11 @@ const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void; user: any; lo
               </div>
             ) : (
               <Link
-                href="/sign-in"
+                href={getAuthRedirectUrl()}
                 onClick={onClose}
                 className="block w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-4 rounded-xl font-bold text-lg text-center hover:scale-105 transition-transform"
               >
-                Inizia Gratis
+                {getAuthButtonText()}
               </Link>
             )}
           </div>
@@ -419,7 +429,7 @@ const TestimonialCard: React.FC<{
 
 const HomePage: React.FC = () => {
   const { y: scrollY } = useScrollPosition();
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, getAuthRedirectUrl, getAuthButtonText } = useAuth();
   const heroRef = useRef<HTMLDivElement>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
@@ -496,6 +506,8 @@ const HomePage: React.FC = () => {
         user={user}
         loading={loading}
         onLogout={logout}
+        getAuthRedirectUrl={getAuthRedirectUrl}
+        getAuthButtonText={getAuthButtonText}
       />
 
       {/* Navigation */}
@@ -536,8 +548,8 @@ const HomePage: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <Link href="/sign-in" className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
-                  Inizia Gratis
+                <Link href={getAuthRedirectUrl()} className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform">
+                  {getAuthButtonText()}
                 </Link>
               )}
             </div>
@@ -566,13 +578,13 @@ const HomePage: React.FC = () => {
             transform: `translate(${mouseParallaxX}px, ${mouseParallaxY}px)`
           }}
         >
-          {/* Enhanced Typography - PIÙ COMPATTO */}
+          {/* Enhanced Typography - PIÃ™ COMPATTO */}
           <h1 className="font-black text-white mb-4 sm:mb-6 leading-[0.9] tracking-tight">
             <span className="block font-light text-xl sm:text-2xl md:text-3xl text-white/80 mb-2">Il futuro del</span>
             <span className="block bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent text-3xl sm:text-5xl md:text-6xl lg:text-7xl">
               BENESSERE
             </span>
-            <span className="block font-light text-lg sm:text-xl md:text-2xl text-white/80 mt-2">è qui</span>
+            <span className="block font-light text-lg sm:text-xl md:text-2xl text-white/80 mt-2">Ã¨ qui</span>
           </h1>
           
           <p className="text-sm sm:text-base md:text-lg text-white/80 mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed font-light px-4">
@@ -587,14 +599,14 @@ const HomePage: React.FC = () => {
             <StatCounter target={94} label="% Miglioramento" delay={400} />
           </div>
 
-          {/* CTA Buttons - COMPATTO */}
+          {/* CTA Buttons - COMPATTO CON SMART REDIRECT */}
           <div className="flex flex-col gap-3 sm:gap-4 justify-center items-center mb-8 sm:mb-10 px-4">
             <Link 
-              href="/dashboard"
+              href={getAuthRedirectUrl()}
               className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full font-bold text-base sm:text-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-2xl flex items-center gap-2 w-full sm:w-auto justify-center"
             >
               <Play className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="relative z-10">Guarda Demo Live</span>
+              <span className="relative z-10">{user ? 'Vai alla Dashboard' : 'Guarda Demo Live'}</span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </Link>
             
@@ -638,8 +650,8 @@ const HomePage: React.FC = () => {
               description="Algoritmo proprietario che analizza 50+ parametri biometrici per un punteggio di benessere da 0 a 100."
               features={[
                 "Analisi sonno REM/non-REM",
-                "Variabilità cardiaca HRV", 
-                "Pattern di attività fisica",
+                "VariabilitÃ  cardiaca HRV", 
+                "Pattern di attivitÃ  fisica",
                 "Stress levels real-time"
               ]}
               delay={0}
@@ -701,7 +713,7 @@ const HomePage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
             <TestimonialCard
-              quote="In 3 settimane il mio LifeScore è passato da 64 a 89. Dormo meglio, ho più energia e la produttività è aumentata del 40%."
+              quote="In 3 settimane il mio LifeScore Ã¨ passato da 64 a 89. Dormo meglio, ho piÃ¹ energia e la produttivitÃ  Ã¨ aumentata del 40%."
               author="Marco Rossi"
               role="Product Manager"
               metrics="+39% miglioramento sonno"
@@ -709,7 +721,7 @@ const HomePage: React.FC = () => {
             />
             
             <TestimonialCard
-              quote="L'AI ha capito che il mio picco di energia è alle 14:30. Ora programmo i task più impegnativi in quel momento. Game changer!"
+              quote="L'AI ha capito che il mio picco di energia Ã¨ alle 14:30. Ora programmo i task piÃ¹ impegnativi in quel momento. Game changer!"
               author="Sofia Chen"
               role="UX Designer"
               metrics="+52% focus pomeridiano"
@@ -717,35 +729,49 @@ const HomePage: React.FC = () => {
             />
             
             <TestimonialCard
-              quote="I power nap guidati di 15 minuti hanno sostituito il caffè del pomeriggio. Mi sento più lucido e dormo meglio la notte."
+              quote="I power nap guidati di 15 minuti hanno sostituito il caffÃ¨ del pomeriggio. Mi sento piÃ¹ lucido e dormo meglio la notte."
               author="Alessandro Bianchi"
               role="Startup Founder"
-              metrics="+73% qualità sonno"
+              metrics="+73% qualitÃ  sonno"
               delay={400}
             />
           </div>
         </div>
       </section>
 
-      {/* Final CTA Section */}
+      {/* Final CTA Section - CON SMART REDIRECT */}
       <section className="relative py-16 sm:py-20 lg:py-24 px-4 sm:px-6">
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-6 sm:mb-8">
-            Inizia la tua
-            <span className="block bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              trasformazione
-            </span>
+            {user ? (
+              <>
+                Benvenuto in
+                <span className="block bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                  LifeOS
+                </span>
+              </>
+            ) : (
+              <>
+                Inizia la tua
+                <span className="block bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                  trasformazione
+                </span>
+              </>
+            )}
           </h2>
           
           <p className="text-base sm:text-lg text-white/70 mb-8 sm:mb-10 max-w-2xl mx-auto px-4">
-            Unisciti a 2.400+ persone che hanno già migliorato la loro qualità di vita con LifeOS. 
-            Risultati misurabili in 14 giorni o rimborso garantito.
+            {user ? (
+              'Continua il tuo percorso di benessere. La tua dashboard ti aspetta con consigli personalizzati e analytics avanzate.'
+            ) : (
+              'Unisciti a 2.400+ persone che hanno giÃ  migliorato la loro qualitÃ  di vita con LifeOS. Risultati misurabili in 14 giorni o rimborso garantito.'
+            )}
           </p>
 
           <div className="flex flex-col gap-6 justify-center items-center mb-8 sm:mb-10 px-4">
-            <Link href="/sign-in" className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-full font-bold text-lg sm:text-xl hover:scale-105 transition-all duration-300 shadow-2xl w-full sm:w-auto">
+            <Link href={getAuthRedirectUrl()} className="group relative bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-full font-bold text-lg sm:text-xl hover:scale-105 transition-all duration-300 shadow-2xl w-full sm:w-auto">
               <span className="relative z-10 flex items-center gap-3 justify-center">
-                Inizia Gratis per 30 giorni
+                {user ? 'Vai alla Dashboard' : 'Inizia Gratis per 30 giorni'}
                 <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
               </span>
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -804,7 +830,7 @@ const HomePage: React.FC = () => {
           
           <div className="flex flex-col sm:flex-row justify-between items-center pt-6 sm:pt-8 border-t border-white/10 gap-4">
             <div className="text-white/40 text-sm text-center sm:text-left">
-              © 2024 LifeOS. Trasforma la tua vita, un giorno alla volta.
+              Â© 2024 LifeOS. Trasforma la tua vita, un giorno alla volta.
             </div>
             
             <div className="flex items-center gap-4 text-white/60">
