@@ -1,26 +1,20 @@
 import { Clock, Droplets, Brain, Wind, Activity, Moon, Zap } from 'lucide-react';
-import { EnhancedBreathingExperience } from '../components/EnhancedBreathingExperience';
+import UnifiedBreathingExperience from '../components/UnifiedBreathingExperience';
 import { GuidedMeditationSystem } from '../components/GuidedMeditationSystem';
 import { VirtualWalkingCoach } from '../components/VirtualWalkingCoach';
 import { HydrationGuide } from '../components/HydrationGuide';
-import ModernBreathing478 from '../components/ModernBreathing478';
 import { PowerNapGuide } from '../components/PowerNapGuide';
 import { StretchingSequence } from '../components/StretchingSequence';
 import { EnergyBoostSession } from '../components/EnergyBoostSession';
 
 // Configurazioni delle suggestions
 export const suggestions = {
-  'take-break': {
-    title: 'Prenditi una pausa',
-    description: 'Momento di relax per ricaricare le energie',
-    icon: Clock,
-    gradient: 'from-blue-400 to-indigo-600',
-    component: () => (
-      <div className="text-center space-y-6">
-        <div className="text-6xl mb-4">☕</div>
-        <p className="text-lg text-white/80">Fermati, respira e ricaricati</p>
-      </div>
-    )
+  'breathing-center': {
+    title: 'Centro di Respirazione',
+    description: 'Tecniche di respirazione guidata per ogni esigenza',
+    icon: Wind,
+    gradient: 'from-green-400 to-teal-600',
+    component: UnifiedBreathingExperience
   },
   'guided-meditation': {
     title: 'Meditazione guidata',
@@ -28,20 +22,6 @@ export const suggestions = {
     icon: Brain,
     gradient: 'from-purple-400 to-pink-600',
     component: GuidedMeditationSystem
-  },
-  'deep-breathing': {
-    title: 'Respirazione profonda',
-    description: 'Tecniche di respirazione terapeutica',
-    icon: Wind,
-    gradient: 'from-green-400 to-teal-600',
-    component: EnhancedBreathingExperience
-  },
-  'breathing-exercise': {
-    title: 'Esercizio di respirazione 4-7-8',
-    description: 'Tecnica di respirazione per rilassamento',
-    icon: Wind,
-    gradient: 'from-green-400 to-emerald-600',
-    component: ModernBreathing478
   },
   '10min-walk': {
     title: 'Camminata di 10 minuti',
