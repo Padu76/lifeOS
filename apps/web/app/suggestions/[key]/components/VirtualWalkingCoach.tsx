@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX, Settings } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX, Settings, Mic } from 'lucide-react';
 
 // TTS Types inline
 interface TTSConfig {
@@ -21,17 +21,18 @@ interface TTSState {
   availableVoices: SpeechSynthesisVoice[];
   error: string | null;
   userHasInteracted: boolean;
+  audioInitialized: boolean;
 }
 
 const DEFAULT_TTS_CONFIG: TTSConfig = {
   voice: null,
   rate: 0.9,
   pitch: 1.0,
-  volume: 0.8,
+  volume: 0.9,
   lang: 'it-IT'
 };
 
-// TTS Hook inline
+// TTS Hook inline con fix per iOS
 const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
   const [config, setConfig] = useState<TTSConfig>({ ...DEFAULT_TTS_CONFIG, ...initialConfig });
   const [state, setState] = useState<TTSState>({
@@ -42,10 +43,13 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
     currentText: '',
     availableVoices: [],
     error: null,
-    userHasInteracted: false
+    userHasInteracted: false,
+    audioInitialized: false
   });
 
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const messageQueueRef = useRef<string[]>([]);
+  const isProcessingRef = useRef(false);
 
   // Initialize TTS support and voices
   useEffect(() => {
@@ -70,7 +74,14 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
         return;
       }
       
-      setState(prev => ({ ...prev, availableVoices: voices }));
+      // FILTRO SOLO VOCI ITALIANE
+      const italianVoices = voices.filter(voice => 
+        voice.lang.startsWith('it') || 
+        voice.lang === 'it-IT' || 
+        voice.lang === 'it_IT'
+      );
+      
+      setState(prev => ({ ...prev, availableVoices: italianVoices }));
 
       if (config.voice) {
         return;
@@ -80,34 +91,36 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       let preferredVoice: SpeechSynthesisVoice | undefined;
       
       if (isIOS) {
-        const candidates = [
-          voices.find(voice => voice.name.toLowerCase().includes('alice') && voice.lang === 'it-IT'),
-          voices.find(voice => voice.name.toLowerCase().includes('alice')),
-          voices.find(voice => voice.lang === 'it-IT' && !voice.name.toLowerCase().includes('en')),
-          voices.find(voice => voice.lang.startsWith('it-') && !voice.name.toLowerCase().includes('en')),
-          voices.find(voice => voice.lang.startsWith('it')),
-          voices.find(voice => voice.name.toLowerCase().includes('italian'))
+        // Priorità voci iOS italiane
+        const iosPriority = [
+          'Alice', // Prima scelta iOS
+          'Luca',  // Seconda scelta iOS
+          'Federica',
+          'Paola'
         ];
         
-        preferredVoice = candidates.find(voice => voice !== undefined);
+        for (const voiceName of iosPriority) {
+          preferredVoice = italianVoices.find(voice => 
+            voice.name.toLowerCase().includes(voiceName.toLowerCase())
+          );
+          if (preferredVoice) break;
+        }
         
-        if (preferredVoice) {
-          setConfig(prev => ({ ...prev, voice: preferredVoice }));
+        // Fallback a qualsiasi voce italiana
+        if (!preferredVoice && italianVoices.length > 0) {
+          preferredVoice = italianVoices[0];
         }
       } else {
-        preferredVoice = voices.find(voice => 
-          voice.name.toLowerCase().includes('google') && voice.lang.startsWith('it')
-        );
-        
-        if (!preferredVoice) {
-          preferredVoice = voices.find(voice => 
-            voice.lang === 'it-IT' || voice.lang.startsWith('it')
-          );
-        }
-        
-        if (preferredVoice) {
-          setConfig(prev => ({ ...prev, voice: preferredVoice }));
-        }
+        // Android/Desktop - priorità Google
+        preferredVoice = italianVoices.find(voice => 
+          voice.name.toLowerCase().includes('google') && voice.lang === 'it-IT'
+        ) || italianVoices.find(voice => 
+          voice.lang === 'it-IT'
+        ) || italianVoices[0];
+      }
+      
+      if (preferredVoice) {
+        setConfig(prev => ({ ...prev, voice: preferredVoice }));
       }
     };
 
@@ -117,6 +130,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       speechSynthesis.onvoiceschanged = loadVoices;
     }
 
+    // Ricarica voci multiple volte su iOS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS) {
       const intervals = [100, 300, 500, 1000, 2000];
@@ -134,68 +148,87 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
     };
   }, []);
 
-  const markUserInteraction = useCallback(() => {
-    setState(prev => ({ ...prev, userHasInteracted: true }));
+  const initializeAudio = useCallback(async () => {
+    if (!state.isSupported) return false;
+    
+    try {
+      // Cancella eventuali speech in corso
+      speechSynthesis.cancel();
+      
+      // Test silenzioso per inizializzare
+      const testUtterance = new SpeechSynthesisUtterance(' ');
+      testUtterance.volume = 0;
+      testUtterance.rate = 1;
+      
+      await new Promise((resolve, reject) => {
+        testUtterance.onend = resolve;
+        testUtterance.onerror = reject;
+        speechSynthesis.speak(testUtterance);
+        
+        // Timeout di sicurezza
+        setTimeout(resolve, 1000);
+      });
+      
+      setState(prev => ({ 
+        ...prev, 
+        userHasInteracted: true,
+        audioInitialized: true,
+        error: null 
+      }));
+      
+      return true;
+    } catch (error) {
+      setState(prev => ({ 
+        ...prev, 
+        error: 'Impossibile inizializzare audio. Riprova.' 
+      }));
+      return false;
+    }
+  }, [state.isSupported]);
+
+  const processMessageQueue = useCallback(async () => {
+    if (isProcessingRef.current || messageQueueRef.current.length === 0) return;
+    
+    isProcessingRef.current = true;
+    
+    while (messageQueueRef.current.length > 0) {
+      const message = messageQueueRef.current.shift();
+      if (message) {
+        await speakTextInternal(message);
+      }
+    }
+    
+    isProcessingRef.current = false;
   }, []);
 
-  const createUtterance = useCallback((text: string): SpeechSynthesisUtterance => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    utterance.voice = config.voice || null;
-    utterance.rate = config.rate;
-    utterance.pitch = config.pitch;
-    utterance.volume = config.volume;
-    utterance.lang = config.lang;
-
-    return utterance;
-  }, [config]);
-
-  const speakText = useCallback((
-    text: string, 
-    callbacks?: {
-      onStart?: () => void;
-      onEnd?: () => void;
-      onError?: (error: string) => void;
-    }
-  ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!state.isSupported) {
-        const error = 'Text-to-Speech non supportato';
-        callbacks?.onError?.(error);
-        reject(new Error(error));
+  const speakTextInternal = (text: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!state.isSupported || !state.audioInitialized) {
+        resolve();
         return;
       }
 
-      if (!state.userHasInteracted) {
-        const error = 'Interazione utente richiesta. Tocca un pulsante per iniziare.';
-        setState(prev => ({ ...prev, error }));
-        callbacks?.onError?.(error);
-        reject(new Error(error));
-        return;
-      }
-
+      // Cancella speech precedente
       if (speechSynthesis.speaking) {
         speechSynthesis.cancel();
       }
 
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: true, 
-        currentText: text,
-        error: null 
-      }));
-
-      const utterance = createUtterance(text);
-      utteranceRef.current = utterance;
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      utterance.voice = config.voice || null;
+      utterance.rate = config.rate;
+      utterance.pitch = config.pitch;
+      utterance.volume = config.volume;
+      utterance.lang = config.lang;
 
       utterance.onstart = () => {
         setState(prev => ({ 
           ...prev, 
           isLoading: false, 
           isPlaying: true,
-          isPaused: false 
+          isPaused: false,
+          currentText: text
         }));
-        callbacks?.onStart?.();
       };
 
       utterance.onend = () => {
@@ -205,48 +238,42 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
           isPaused: false,
           currentText: '' 
         }));
-        callbacks?.onEnd?.();
         resolve();
       };
 
-      utterance.onerror = (event) => {
-        const errorMsg = `TTS Error: ${event.error}`;
+      utterance.onerror = () => {
         setState(prev => ({ 
           ...prev, 
           isLoading: false,
           isPlaying: false,
-          isPaused: false,
-          error: errorMsg 
+          isPaused: false
         }));
-        callbacks?.onError?.(errorMsg);
-        reject(new Error(errorMsg));
-      };
-
-      utterance.onpause = () => {
-        setState(prev => ({ ...prev, isPaused: true }));
-      };
-
-      utterance.onresume = () => {
-        setState(prev => ({ ...prev, isPaused: false }));
+        resolve();
       };
 
       try {
         speechSynthesis.speak(utterance);
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'TTS failed to start';
-        setState(prev => ({ 
-          ...prev, 
-          isLoading: false,
-          error: errorMsg 
-        }));
-        callbacks?.onError?.(errorMsg);
-        reject(new Error(errorMsg));
+        utteranceRef.current = utterance;
+      } catch {
+        resolve();
       }
     });
-  }, [state.isSupported, state.userHasInteracted, createUtterance]);
+  };
+
+  const speakText = useCallback((text: string): Promise<void> => {
+    if (!state.audioInitialized) {
+      return Promise.resolve();
+    }
+    
+    // Aggiungi alla coda invece di parlare direttamente
+    messageQueueRef.current = [text]; // Sostituisce la coda con il nuovo messaggio
+    return processMessageQueue();
+  }, [state.audioInitialized, processMessageQueue]);
 
   const stop = useCallback(() => {
     speechSynthesis.cancel();
+    messageQueueRef.current = [];
+    isProcessingRef.current = false;
     setState(prev => ({ 
       ...prev, 
       isPlaying: false,
@@ -264,9 +291,8 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
     message: string,
     onComplete?: () => void
   ) => {
-    await speakText(message, {
-      onEnd: onComplete
-    });
+    await speakText(message);
+    onComplete?.();
   }, [speakText]);
 
   return {
@@ -274,10 +300,10 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
     config,
     speak: speakText,
     stop,
-    markUserInteraction,
+    initializeAudio,
     updateConfig,
     speakCoachingMessage,
-    canSpeak: state.isSupported && state.userHasInteracted,
+    canSpeak: state.isSupported && state.audioInitialized,
     isActive: state.isPlaying || state.isLoading
   };
 };
@@ -296,12 +322,14 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   const [achievements, setAchievements] = useState<string[]>([]);
   const [currentMilestone, setCurrentMilestone] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
+  const [showAudioPrompt, setShowAudioPrompt] = useState(false);
   
   // TTS Integration
   const {
     speakCoachingMessage,
-    markUserInteraction,
+    initializeAudio,
     canSpeak,
+    audioInitialized,
     isActive: ttsIsActive,
     stop: stopTTS,
     config,
@@ -311,9 +339,13 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   } = useTTSInline();
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMessageTimeRef = useRef<number>(0);
   const totalDuration = 600; // 10 minuti
 
-  // FASI OTTIMIZZATE - Parte subito dal riscaldamento!
+  // Detect iOS
+  const isIOS = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  // FASI OTTIMIZZATE
   const walkingPhases = {
     warmup: { start: 0, end: 120, title: "Riscaldamento", color: "from-green-400 to-emerald-500", icon: "🌱" },
     steady_pace: { start: 120, end: 300, title: "Passo Costante", color: "from-orange-400 to-amber-500", icon: "⚡" },
@@ -376,6 +408,16 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     return phaseMessages[Math.min(messageIndex, phaseMessages.length - 1)];
   };
 
+  // Enable audio handler
+  const handleEnableAudio = async () => {
+    const success = await initializeAudio();
+    if (success) {
+      setShowAudioPrompt(false);
+      // Test con messaggio di benvenuto
+      await speakCoachingMessage("Audio attivato! Sono il tuo coach virtuale, pronto a guidarti.");
+    }
+  };
+
   useEffect(() => {
     if (isActive && currentPhase !== 'completed') {
       const stepsPerSecond = currentPhase === 'energetic' ? 2.2 : currentPhase === 'steady_pace' ? 2.0 : 1.8;
@@ -415,21 +457,29 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
         setCurrentTime(prev => {
           const newTime = prev + 1;
           const newPhase = getCurrentPhase(newTime);
+          const now = Date.now();
           
+          // Cambio fase
           if (newPhase !== currentPhase) {
             setCurrentPhase(newPhase);
 
             if (audioEnabled && canSpeak) {
               const message = getCoachingMessage(newPhase, 0);
               speakCoachingMessage(message);
+              lastMessageTimeRef.current = now;
             }
           }
-
-          // Messaggio ogni 30 secondi durante la fase attuale
-          if (newTime % 30 === 0 && audioEnabled && canSpeak && newPhase !== 'completed') {
+          
+          // Messaggio ogni 30 secondi (evita sovrapposizioni)
+          else if (newTime % 30 === 0 && 
+                   audioEnabled && 
+                   canSpeak && 
+                   newPhase !== 'completed' &&
+                   (now - lastMessageTimeRef.current) > 5000) { // Almeno 5 secondi tra messaggi
             const timeInPhase = newTime - walkingPhases[newPhase].start;
             const message = getCoachingMessage(newPhase, timeInPhase);
             speakCoachingMessage(message);
+            lastMessageTimeRef.current = now;
           }
 
           checkAchievements(newTime, stepCount);
@@ -458,15 +508,20 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     };
   }, [isActive, currentPhase, audioEnabled, stepCount, onComplete, canSpeak, speakCoachingMessage, stopTTS]);
 
-  const startWalking = () => {
-    markUserInteraction();
+  const startWalking = async () => {
+    // Su iOS, mostra prima il prompt audio
+    if (isIOS && audioEnabled && !audioInitialized) {
+      setShowAudioPrompt(true);
+      return;
+    }
+    
     setIsActive(true);
     setHasStarted(true);
     
-    // Messaggio iniziale immediato
+    // Messaggio iniziale
     if (audioEnabled && canSpeak) {
       const message = "Iniziamo con un passo comodo e naturale. Benvenuto nella tua camminata!";
-      speakCoachingMessage(message);
+      await speakCoachingMessage(message);
     }
   };
 
@@ -490,15 +545,20 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     setAchievements([]);
     setCurrentMilestone(null);
     setHasStarted(false);
+    lastMessageTimeRef.current = 0;
     stopTTS();
   };
 
-  const toggleAudio = useCallback(() => {
-    setAudioEnabled(prev => !prev);
-    if (!audioEnabled) {
-      markUserInteraction();
+  const toggleAudio = useCallback(async () => {
+    const newAudioState = !audioEnabled;
+    setAudioEnabled(newAudioState);
+    
+    if (newAudioState && !audioInitialized && isIOS) {
+      setShowAudioPrompt(true);
+    } else if (!newAudioState) {
+      stopTTS();
     }
-  }, [audioEnabled, markUserInteraction]);
+  }, [audioEnabled, audioInitialized, isIOS, stopTTS]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -514,6 +574,44 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
 
   return (
     <div className="space-y-8">
+      {/* Audio Enable Prompt per iOS */}
+      {showAudioPrompt && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-sm w-full border border-white/20">
+            <div className="text-center space-y-4">
+              <div className="text-5xl">🎧</div>
+              <h3 className="text-xl font-bold text-white">Attiva il Coaching Vocale</h3>
+              <p className="text-white/80 text-sm">
+                Per guidarti durante la camminata, ho bisogno di attivare l'audio. 
+                {isIOS && " Su iOS è necessaria la tua autorizzazione."}
+              </p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={handleEnableAudio}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-full font-semibold hover:scale-105 transition-transform"
+                >
+                  <Mic className="inline w-5 h-5 mr-2" />
+                  Attiva Audio Italiano
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowAudioPrompt(false);
+                    setAudioEnabled(false);
+                    setIsActive(true);
+                    setHasStarted(true);
+                  }}
+                  className="w-full bg-white/10 text-white/70 px-6 py-3 rounded-full hover:bg-white/20 transition-colors text-sm"
+                >
+                  Continua senza audio
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sfondo dinamico con effetti di movimento */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 opacity-20">
@@ -548,20 +646,22 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
           </button>
 
           {/* Settings */}
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="bg-gray-600 text-white p-2 rounded-lg font-semibold hover:scale-105 transition-transform"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          {audioEnabled && availableVoices.length > 0 && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="bg-gray-600 text-white p-2 rounded-lg font-semibold hover:scale-105 transition-transform"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Audio Warning for iOS */}
-      {!canSpeak && audioEnabled && (
+      {/* Audio Status */}
+      {audioEnabled && !audioInitialized && !showAudioPrompt && (
         <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-6 relative z-10">
           <p className="text-yellow-200 text-sm text-center">
-            Tocca "Play" per abilitare il coaching vocale
+            {isIOS ? "Premi Play per attivare il coaching vocale" : "Audio non ancora inizializzato"}
           </p>
         </div>
       )}
@@ -573,16 +673,16 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
         </div>
       )}
 
-      {/* Settings Panel */}
+      {/* Settings Panel - SOLO VOCI ITALIANE */}
       {showSettings && (
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8 border border-white/20 relative z-10">
-          <h3 className="text-white text-lg font-semibold mb-4">Impostazioni Coach</h3>
+          <h3 className="text-white text-lg font-semibold mb-4">Impostazioni Coach Vocale</h3>
           
-          {/* Voice Selection */}
-          {audioEnabled && availableVoices.length > 0 && (
+          {/* Voice Selection - SOLO ITALIANE */}
+          {availableVoices.length > 0 ? (
             <div className="mb-4">
               <label className="block text-white text-sm font-medium mb-2">
-                Voce del Coach
+                Voce Italiana del Coach
               </label>
               <select
                 value={config.voice?.name || ''}
@@ -592,35 +692,56 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
                 }}
                 className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg"
               >
-                <option value="">Voce predefinita</option>
-                {availableVoices
-                  .filter(voice => voice.lang.startsWith('it') || voice.lang.startsWith('en'))
-                  .map((voice) => (
+                <option value="">Voce italiana predefinita</option>
+                {availableVoices.map((voice) => (
                   <option key={voice.name} value={voice.name}>
-                    {voice.name} ({voice.lang})
+                    {voice.name} {voice.lang === 'it-IT' ? '🇮🇹' : ''}
                   </option>
                 ))}
               </select>
+              <p className="text-white/60 text-xs mt-2">
+                {availableVoices.length} {availableVoices.length === 1 ? 'voce italiana disponibile' : 'voci italiane disponibili'}
+              </p>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-yellow-500/20 rounded-lg">
+              <p className="text-yellow-200 text-sm">
+                Nessuna voce italiana trovata. Usa le impostazioni di sistema per aggiungere voci italiane.
+              </p>
             </div>
           )}
 
           {/* Speech Rate */}
-          {audioEnabled && (
-            <div className="mb-4">
-              <label className="block text-white text-sm font-medium mb-2">
-                Velocità voce: {config.rate.toFixed(1)}x
-              </label>
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value={config.rate}
-                onChange={(e) => updateConfig({ rate: parseFloat(e.target.value) })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-          )}
+          <div className="mb-4">
+            <label className="block text-white text-sm font-medium mb-2">
+              Velocità voce: {config.rate.toFixed(1)}x
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="1.5"
+              step="0.1"
+              value={config.rate}
+              onChange={(e) => updateConfig({ rate: parseFloat(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Volume */}
+          <div className="mb-4">
+            <label className="block text-white text-sm font-medium mb-2">
+              Volume: {Math.round(config.volume * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="1"
+              step="0.1"
+              value={config.volume}
+              onChange={(e) => updateConfig({ volume: parseFloat(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
         </div>
       )}
 
@@ -744,10 +865,11 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
             </div>
           )}
           
-          {audioEnabled && hasStarted && (
+          {audioEnabled && hasStarted && audioInitialized && (
             <div className="mt-4 p-3 bg-green-500/20 rounded-lg">
-              <p className="text-green-200 text-sm">
-                Il coach vocale ti sta guidando
+              <p className="text-green-200 text-sm flex items-center justify-center gap-2">
+                <Volume2 className="w-4 h-4" />
+                Coach vocale italiano attivo
               </p>
             </div>
           )}

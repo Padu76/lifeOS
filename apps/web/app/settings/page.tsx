@@ -7,7 +7,6 @@ import {
   Zap, Smile, Coffee, Calendar, AlertCircle, CheckCircle, Wifi, WifiOff, Loader
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import SyncService from '@lifeos/shared/services/SyncService';
 
 // Enhanced types for notification preferences
 interface NotificationPreferences {
@@ -139,7 +138,17 @@ const mockUser = {
   user_metadata: { full_name: 'Andrea' }
 };
 
-const getCurrentUser = async () => mockUser;
+const getCurrentUser = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      return session.user;
+    }
+    return mockUser;
+  } catch {
+    return mockUser;
+  }
+};
 
 // Components remain the same...
 const MobileMenu: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -264,7 +273,7 @@ const SettingsPage: React.FC = () => {
     }
   }, []);
 
-  // Initialize SyncService and load user
+  // Initialize settings and load user
   useEffect(() => {
     const initializeSettings = async () => {
       setLoading(true);
@@ -278,24 +287,15 @@ const SettingsPage: React.FC = () => {
         
         setUser(currentUser);
         
-        // Get auth token and initialize SyncService
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token && currentUser.id) {
-          SyncService.setCredentials(currentUser.id, session.access_token);
-          
-          // Force initial sync
-          await SyncService.forcSync();
-          
-          // Load synced preferences
-          await loadSyncedPreferences();
-        } else {
-          // Use defaults with user data
-          setPreferences(prev => ({
-            ...prev,
-            email: currentUser.email || '',
-            display_name: currentUser.user_metadata?.full_name || ''
-          }));
-        }
+        // Load preferences from localStorage
+        await loadLocalPreferences();
+        
+        // Use defaults with user data
+        setPreferences(prev => ({
+          ...prev,
+          email: currentUser.email || '',
+          display_name: currentUser.user_metadata?.full_name || ''
+        }));
         
       } catch (err: any) {
         console.error('Error initializing settings:', err);
@@ -308,24 +308,22 @@ const SettingsPage: React.FC = () => {
     initializeSettings();
   }, []);
 
-  // Monitor sync status
+  // Monitor online status
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIsOnline(SyncService.getOnlineStatus());
-      setQueueLength(SyncService.getSyncQueueLength());
-      
-      // Update last sync from localStorage
-      const lastSyncStr = localStorage.getItem('last_sync_timestamp');
-      if (lastSyncStr) {
-        setLastSync(new Date(lastSyncStr));
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  // Load synced preferences from local storage
-  const loadSyncedPreferences = async () => {
+  // Load preferences from local storage
+  const loadLocalPreferences = async () => {
     try {
       const storedPrefs = localStorage.getItem('notification_preferences');
       if (storedPrefs) {
@@ -336,7 +334,7 @@ const SettingsPage: React.FC = () => {
         }));
       }
     } catch (error) {
-      console.error('Error loading synced preferences:', error);
+      console.error('Error loading preferences:', error);
     }
   };
 
@@ -345,12 +343,6 @@ const SettingsPage: React.FC = () => {
     setError(null);
     
     try {
-      await SyncService.scheduleNotification({
-        type: 'immediate',
-        category: 'mindfulness',
-        message: 'Test delle notifiche intelligenti - Sistema automatizzato funzionante!'
-      });
-
       // Show browser notification if available
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('LifeOS Test', {
@@ -429,10 +421,11 @@ const SettingsPage: React.FC = () => {
         }
       }
       
-      // Save notification preferences via SyncService
-      await SyncService.updatePreferences(preferences.smart_notifications);
+      // Save notification preferences to localStorage
+      localStorage.setItem('notification_preferences', JSON.stringify(preferences.smart_notifications));
+      setLastSync(new Date());
       
-      setSuccessMessage('Preferenze salvate e sincronizzate automaticamente!');
+      setSuccessMessage('Preferenze salvate e sincronizzate!');
       
       const updatedUser = await getCurrentUser();
       if (updatedUser) {
@@ -446,23 +439,6 @@ const SettingsPage: React.FC = () => {
       setError('Errore nel salvataggio delle preferenze: ' + err.message);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const forceSync = async () => {
-    setError(null);
-    try {
-      const result = await SyncService.forcSync();
-      if (result.success) {
-        setSuccessMessage('Sincronizzazione completata!');
-        await loadSyncedPreferences();
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } else {
-        setError(`Errore sincronizzazione: ${result.errors.join(', ')}`);
-      }
-    } catch (error) {
-      console.error('Error forcing sync:', error);
-      setError('Errore durante la sincronizzazione');
     }
   };
 
@@ -502,9 +478,9 @@ const SettingsPage: React.FC = () => {
     current[path[path.length - 1]] = value;
     setPreferences(newPrefs);
     
-    // Auto-save via SyncService
+    // Auto-save to localStorage
     try {
-      await SyncService.updatePreferences(newPrefs.smart_notifications);
+      localStorage.setItem('notification_preferences', JSON.stringify(newPrefs.smart_notifications));
     } catch (error) {
       console.error('Error auto-saving preference:', error);
     }
@@ -520,9 +496,9 @@ const SettingsPage: React.FC = () => {
     };
     setPreferences(newPrefs);
     
-    // Auto-save via SyncService
+    // Auto-save to localStorage
     try {
-      await SyncService.updatePreferences(newPrefs.smart_notifications);
+      localStorage.setItem('notification_preferences', JSON.stringify(newPrefs.smart_notifications));
     } catch (error) {
       console.error('Error auto-saving circadian setting:', error);
     }
@@ -554,7 +530,7 @@ const SettingsPage: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <div className="text-center p-4">
           <div className="w-12 h-12 sm:w-16 sm:h-16 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="text-white text-base sm:text-lg">Caricamento impostazioni automatizzate...</div>
+          <div className="text-white text-base sm:text-lg">Caricamento impostazioni...</div>
         </div>
       </div>
     );
@@ -621,26 +597,19 @@ const SettingsPage: React.FC = () => {
       </nav>
 
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-6xl">
-        {/* Header with Sync Status */}
+        {/* Header */}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2 flex items-center gap-3">
             <Settings className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-blue-400" />
-            Impostazioni Automatizzate
+            Impostazioni
           </h1>
           <div className="flex items-center gap-4 text-sm text-white/70">
-            <span>Sincronizzazione cross-platform attiva</span>
             <div className="flex items-center gap-1">
               {isOnline ? <Wifi className="w-4 h-4 text-green-400" /> : <WifiOff className="w-4 h-4 text-red-400" />}
               <span>{isOnline ? 'Online' : 'Offline'}</span>
             </div>
-            {queueLength > 0 && (
-              <div className="flex items-center gap-1">
-                <Loader className="w-4 h-4 text-orange-400" />
-                <span>{queueLength} in coda</span>
-              </div>
-            )}
             {lastSync && (
-              <span>Ultimo sync: {lastSync.toLocaleTimeString()}</span>
+              <span>Ultimo salvataggio: {lastSync.toLocaleTimeString()}</span>
             )}
           </div>
         </div>
@@ -657,37 +626,6 @@ const SettingsPage: React.FC = () => {
             {successMessage}
           </div>
         )}
-
-        {/* Sync Controls */}
-        <div className="mb-6 bg-white/5 border border-white/10 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-white font-medium">Controlli Sincronizzazione</h3>
-              <p className="text-white/60 text-sm">Gestisci la sincronizzazione automatica cross-platform</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={forceSync}
-                className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-4 py-2 rounded-lg transition-colors border border-blue-400/30 text-sm flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Sync Manuale
-              </button>
-              <button
-                onClick={testSmartNotification}
-                disabled={testingNotification}
-                className="bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-50 text-purple-300 px-4 py-2 rounded-lg transition-colors border border-purple-400/30 text-sm flex items-center gap-2"
-              >
-                {testingNotification ? (
-                  <Loader className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Zap className="w-4 h-4" />
-                )}
-                Test Sistema
-              </button>
-            </div>
-          </div>
-        </div>
 
         <MobileTabSelector 
           tabs={tabs} 
@@ -730,15 +668,15 @@ const SettingsPage: React.FC = () => {
                 <div className="space-y-6 sm:space-y-8">
                   <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-3">
                     <Bell className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
-                    Notifiche Intelligenti Automatizzate
+                    Notifiche Intelligenti
                   </h2>
                   
                   {/* Master Enable */}
                   <div className="bg-white/5 border border-white/10 rounded-lg p-4 sm:p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <div className="text-white font-medium text-base sm:text-lg">Sistema Automatizzato</div>
-                        <div className="text-white/60 text-sm">Sync automatico cross-platform attivo</div>
+                        <div className="text-white font-medium text-base sm:text-lg">Sistema Notifiche</div>
+                        <div className="text-white/60 text-sm">Attiva le notifiche intelligenti</div>
                       </div>
                       <ToggleSwitch
                         checked={preferences.smart_notifications.enabled}
@@ -758,7 +696,7 @@ const SettingsPage: React.FC = () => {
                           ) : (
                             <Zap className="w-4 h-4" />
                           )}
-                          Test Automatico
+                          Test Notifica
                         </button>
                         
                         <a
@@ -766,7 +704,7 @@ const SettingsPage: React.FC = () => {
                           className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 px-4 py-3 rounded-lg transition-colors border border-purple-400/30 min-h-[44px] text-sm flex items-center justify-center gap-2"
                         >
                           <Target className="w-4 h-4" />
-                          Dashboard Live
+                          Dashboard
                         </a>
                       </div>
                     )}
@@ -774,17 +712,17 @@ const SettingsPage: React.FC = () => {
 
                   {preferences.smart_notifications.enabled && (
                     <>
-                      {/* Auto-sync categories */}
+                      {/* Categories */}
                       <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-white">Categorie (Auto-Sync)</h3>
+                        <h3 className="text-lg font-semibold text-white">Categorie</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {[
-                            { key: 'stress_relief', label: 'Stress Relief', icon: Heart, description: 'Sync automatico per gestione stress' },
-                            { key: 'energy_boost', label: 'Energy Boost', icon: Zap, description: 'Sync automatico per energie e vitalità' },
-                            { key: 'sleep_prep', label: 'Sleep Prep', icon: Moon, description: 'Sync automatico preparazione sonno' },
-                            { key: 'celebration', label: 'Celebration', icon: Smile, description: 'Sync automatico riconoscimenti' },
-                            { key: 'mindfulness', label: 'Mindfulness', icon: Brain, description: 'Sync automatico consapevolezza' },
-                            { key: 'emergency', label: 'Emergency', icon: AlertCircle, description: 'Sync automatico emergenze' }
+                            { key: 'stress_relief', label: 'Stress Relief', icon: Heart, description: 'Gestione dello stress' },
+                            { key: 'energy_boost', label: 'Energy Boost', icon: Zap, description: 'Energia e vitalità' },
+                            { key: 'sleep_prep', label: 'Sleep Prep', icon: Moon, description: 'Preparazione al sonno' },
+                            { key: 'celebration', label: 'Celebration', icon: Smile, description: 'Riconoscimenti' },
+                            { key: 'mindfulness', label: 'Mindfulness', icon: Brain, description: 'Consapevolezza' },
+                            { key: 'emergency', label: 'Emergency', icon: AlertCircle, description: 'Emergenze' }
                           ].map(category => {
                             const Icon = category.icon;
                             return (
@@ -806,9 +744,9 @@ const SettingsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Auto-sync delivery channels */}
+                      {/* Delivery channels */}
                       <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-white">Canali Delivery (Auto-Sync)</h3>
+                        <h3 className="text-lg font-semibold text-white">Canali di Notifica</h3>
                         
                         <div className="border border-white/20 rounded-lg p-4">
                           <div className="flex items-center justify-between mb-3">
@@ -837,7 +775,7 @@ const SettingsPage: React.FC = () => {
                               onClick={requestNotificationPermission}
                               className="w-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-4 py-2 rounded-lg transition-colors border border-blue-400/30 text-sm"
                             >
-                              Abilita Notifiche Auto-Sync
+                              Abilita Notifiche Browser
                             </button>
                           )}
                         </div>
@@ -847,7 +785,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Other tabs remain the same but simpler... */}
+              {/* Profile tab */}
               {activeTab === 'profile' && (
                 <div className="space-y-4 sm:space-y-6">
                   <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-3">
@@ -881,10 +819,9 @@ const SettingsPage: React.FC = () => {
                 </div>
               )}
               
-              {/* Save Button with Auto-Sync Status */}
+              {/* Save Button */}
               <div className="flex flex-col sm:flex-row items-center justify-between pt-6 sm:pt-8 border-t border-white/20 gap-4">
                 <div className="flex items-center gap-4 text-sm text-white/60">
-                  <span>Auto-sync attivo</span>
                   {isOnline ? <CheckCircle className="w-4 h-4 text-green-400" /> : <AlertCircle className="w-4 h-4 text-red-400" />}
                 </div>
                 
@@ -896,12 +833,12 @@ const SettingsPage: React.FC = () => {
                   {saving ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      Sincronizzando...
+                      Salvando...
                     </>
                   ) : (
                     <>
                       <Save className="w-4 h-4" />
-                      Salva & Sync
+                      Salva
                     </>
                   )}
                 </button>
