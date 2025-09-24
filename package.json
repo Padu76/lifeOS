@@ -9,6 +9,9 @@
     "apps/*"
   ],
   "scripts": {
+    "build": "npm run build:web",
+    "start": "npm --workspace apps/web run start",
+    "dev": "npm run dev:web",
     "dev:mobile": "npm --workspace apps/mobile run start",
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
