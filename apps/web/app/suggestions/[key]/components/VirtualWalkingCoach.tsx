@@ -32,7 +32,7 @@ const DEFAULT_TTS_CONFIG: TTSConfig = {
   lang: 'it-IT'
 };
 
-// TTS Hook inline con fix per iOS
+// TTS Hook inline con fix completo per tutti i browser
 const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
   const [config, setConfig] = useState<TTSConfig>({ ...DEFAULT_TTS_CONFIG, ...initialConfig });
   const [state, setState] = useState<TTSState>({
@@ -74,10 +74,10 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
         return;
       }
       
-      // FILTRO SOLO VOCI ITALIANE
+      // FILTRO RIGOROSO: SOLO VOCI ITALIANE
       const italianVoices = voices.filter(voice => 
-        voice.lang.startsWith('it') || 
         voice.lang === 'it-IT' || 
+        voice.lang.startsWith('it-') ||
         voice.lang === 'it_IT'
       );
       
@@ -92,12 +92,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       
       if (isIOS) {
         // Priorità voci iOS italiane
-        const iosPriority = [
-          'Alice', // Prima scelta iOS
-          'Luca',  // Seconda scelta iOS
-          'Federica',
-          'Paola'
-        ];
+        const iosPriority = ['Alice', 'Luca', 'Federica', 'Paola'];
         
         for (const voiceName of iosPriority) {
           preferredVoice = italianVoices.find(voice => 
@@ -106,12 +101,11 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
           if (preferredVoice) break;
         }
         
-        // Fallback a qualsiasi voce italiana
         if (!preferredVoice && italianVoices.length > 0) {
           preferredVoice = italianVoices[0];
         }
       } else {
-        // Android/Desktop - priorità Google
+        // Desktop/Android - priorità Google italiano
         preferredVoice = italianVoices.find(voice => 
           voice.name.toLowerCase().includes('google') && voice.lang === 'it-IT'
         ) || italianVoices.find(voice => 
@@ -121,6 +115,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       
       if (preferredVoice) {
         setConfig(prev => ({ ...prev, voice: preferredVoice }));
+        console.log('🎙️ Voce italiana selezionata:', preferredVoice.name);
       }
     };
 
@@ -130,14 +125,12 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       speechSynthesis.onvoiceschanged = loadVoices;
     }
 
-    // Ricarica voci multiple volte su iOS
+    // iOS: ricarica voci multiple volte
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS) {
       const intervals = [100, 300, 500, 1000, 2000];
       intervals.forEach(delay => {
-        setTimeout(() => {
-          loadVoices();
-        }, delay);
+        setTimeout(() => loadVoices(), delay);
       });
     }
 
@@ -148,26 +141,12 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
     };
   }, []);
 
-  const initializeAudio = useCallback(async () => {
+  const initializeAudio = useCallback(() => {
     if (!state.isSupported) return false;
     
     try {
-      // Cancella eventuali speech in corso
+      // Chrome/Desktop fix: SEMPRE cancella prima di inizializzare
       speechSynthesis.cancel();
-      
-      // Test silenzioso per inizializzare
-      const testUtterance = new SpeechSynthesisUtterance(' ');
-      testUtterance.volume = 0;
-      testUtterance.rate = 1;
-      
-      await new Promise((resolve, reject) => {
-        testUtterance.onend = resolve;
-        testUtterance.onerror = reject;
-        speechSynthesis.speak(testUtterance);
-        
-        // Timeout di sicurezza
-        setTimeout(resolve, 1000);
-      });
       
       setState(prev => ({ 
         ...prev, 
@@ -176,8 +155,10 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
         error: null 
       }));
       
+      console.log('✅ Audio inizializzato con successo');
       return true;
     } catch (error) {
+      console.error('❌ Errore inizializzazione audio:', error);
       setState(prev => ({ 
         ...prev, 
         error: 'Impossibile inizializzare audio. Riprova.' 
@@ -203,18 +184,26 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
 
   const speakTextInternal = (text: string): Promise<void> => {
     return new Promise((resolve) => {
-      if (!state.isSupported || !state.audioInitialized) {
+      if (!state.isSupported) {
+        console.warn('TTS non supportato');
         resolve();
         return;
       }
 
-      // Cancella speech precedente
-      if (speechSynthesis.speaking) {
+      // Auto-inizializza se necessario
+      if (!state.audioInitialized) {
+        console.log('🔧 Auto-inizializzazione audio...');
+        initializeAudio();
+      }
+
+      // CHROME FIX: Cancella SEMPRE prima di parlare
+      if (speechSynthesis.speaking || speechSynthesis.pending) {
         speechSynthesis.cancel();
       }
 
       const utterance = new SpeechSynthesisUtterance(text);
       
+      // Configurazione voce italiana
       utterance.voice = config.voice || null;
       utterance.rate = config.rate;
       utterance.pitch = config.pitch;
@@ -222,6 +211,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       utterance.lang = config.lang;
 
       utterance.onstart = () => {
+        console.log('🎤 Audio started:', text.substring(0, 50) + '...');
         setState(prev => ({ 
           ...prev, 
           isLoading: false, 
@@ -232,6 +222,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
       };
 
       utterance.onend = () => {
+        console.log('✅ Audio completato');
         setState(prev => ({ 
           ...prev, 
           isPlaying: false,
@@ -241,34 +232,51 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
         resolve();
       };
 
-      utterance.onerror = () => {
+      utterance.onerror = (error) => {
+        console.error('❌ Audio error:', error);
         setState(prev => ({ 
           ...prev, 
           isLoading: false,
           isPlaying: false,
-          isPaused: false
+          isPaused: false,
+          error: 'Errore audio. Riprova.'
         }));
         resolve();
       };
 
       try {
+        // CHROME FIX: Cancel immediato prima di speak
+        speechSynthesis.cancel();
         speechSynthesis.speak(utterance);
         utteranceRef.current = utterance;
-      } catch {
+        
+        // Chrome Desktop Workaround: Se dopo 100ms non è partito, riprova
+        setTimeout(() => {
+          if (!speechSynthesis.speaking && state.audioInitialized) {
+            console.log('⚠️ Chrome workaround: retry speak');
+            speechSynthesis.cancel();
+            speechSynthesis.speak(utterance);
+          }
+        }, 100);
+        
+      } catch (err) {
+        console.error('❌ Speak error:', err);
         resolve();
       }
     });
   };
 
   const speakText = useCallback((text: string): Promise<void> => {
+    // Auto-inizializza sempre se necessario
     if (!state.audioInitialized) {
-      return Promise.resolve();
+      console.log('🔧 Auto-init per:', text.substring(0, 30));
+      initializeAudio();
     }
     
-    // Aggiungi alla coda invece di parlare direttamente
-    messageQueueRef.current = [text]; // Sostituisce la coda con il nuovo messaggio
+    // Sostituisce la coda con il nuovo messaggio
+    messageQueueRef.current = [text];
     return processMessageQueue();
-  }, [state.audioInitialized, processMessageQueue]);
+  }, [state.audioInitialized, initializeAudio, processMessageQueue]);
 
   const stop = useCallback(() => {
     speechSynthesis.cancel();
@@ -303,7 +311,7 @@ const useTTSInline = (initialConfig: Partial<TTSConfig> = {}) => {
     initializeAudio,
     updateConfig,
     speakCoachingMessage,
-    canSpeak: state.isSupported && state.audioInitialized,
+    canSpeak: state.isSupported,
     isActive: state.isPlaying || state.isLoading
   };
 };
@@ -323,6 +331,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   const [currentMilestone, setCurrentMilestone] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [showAudioPrompt, setShowAudioPrompt] = useState(false);
+  const [voiceInitialized, setVoiceInitialized] = useState(false);
   
   // TTS Integration
   const {
@@ -408,11 +417,26 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     return phaseMessages[Math.min(messageIndex, phaseMessages.length - 1)];
   };
 
+  // Auto-inizializza audio all'apertura del componente
+  useEffect(() => {
+    if (audioEnabled && !voiceInitialized) {
+      const init = async () => {
+        const success = await initializeAudio();
+        if (success) {
+          setVoiceInitialized(true);
+          console.log('✅ Voce italiana inizializzata automaticamente');
+        }
+      };
+      init();
+    }
+  }, [audioEnabled, voiceInitialized, initializeAudio]);
+
   // Enable audio handler
   const handleEnableAudio = async () => {
     const success = await initializeAudio();
     if (success) {
       setShowAudioPrompt(false);
+      setVoiceInitialized(true);
       // Test con messaggio di benvenuto
       await speakCoachingMessage("Audio attivato! Sono il tuo coach virtuale, pronto a guidarti.");
     }
@@ -438,7 +462,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     }
     if (steps >= 1000 && !achievements.includes('1k_steps')) {
       newAchievements.push('1k_steps');
-      setCurrentMilestone('1000 passi raggiunti! 👏');
+      setCurrentMilestone('1000 passi raggiunti! 👍');
     }
     if (time >= 480 && !achievements.includes('8min')) {
       newAchievements.push('8min');
@@ -509,17 +533,24 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
   }, [isActive, currentPhase, audioEnabled, stepCount, onComplete, canSpeak, speakCoachingMessage, stopTTS]);
 
   const startWalking = async () => {
-    // Su iOS, mostra prima il prompt audio
-    if (isIOS && audioEnabled && !audioInitialized) {
-      setShowAudioPrompt(true);
-      return;
+    // Auto-inizializza audio se necessario
+    if (audioEnabled && !voiceInitialized) {
+      const success = await initializeAudio();
+      if (!success && isIOS) {
+        setShowAudioPrompt(true);
+        return;
+      }
+      setVoiceInitialized(true);
     }
     
     setIsActive(true);
     setHasStarted(true);
     
-    // Messaggio iniziale
-    if (audioEnabled && canSpeak) {
+    // Messaggio iniziale - Auto-speak senza bisogno di controlli
+    if (audioEnabled) {
+      // Piccolo delay per garantire inizializzazione su tutti i browser
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const message = "Iniziamo con un passo comodo e naturale. Benvenuto nella tua camminata!";
       await speakCoachingMessage(message);
     }
@@ -553,12 +584,17 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
     const newAudioState = !audioEnabled;
     setAudioEnabled(newAudioState);
     
-    if (newAudioState && !audioInitialized && isIOS) {
-      setShowAudioPrompt(true);
+    if (newAudioState && !voiceInitialized) {
+      const success = await initializeAudio();
+      if (success) {
+        setVoiceInitialized(true);
+      } else if (isIOS) {
+        setShowAudioPrompt(true);
+      }
     } else if (!newAudioState) {
       stopTTS();
     }
-  }, [audioEnabled, audioInitialized, isIOS, stopTTS]);
+  }, [audioEnabled, voiceInitialized, isIOS, stopTTS, initializeAudio]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -657,11 +693,11 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
         </div>
       </div>
 
-      {/* Audio Status */}
-      {audioEnabled && !audioInitialized && !showAudioPrompt && (
-        <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-6 relative z-10">
-          <p className="text-yellow-200 text-sm text-center">
-            {isIOS ? "Premi Play per attivare il coaching vocale" : "Audio non ancora inizializzato"}
+      {/* Audio Status Info */}
+      {audioEnabled && voiceInitialized && !hasStarted && (
+        <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-4 mb-6 relative z-10">
+          <p className="text-green-200 text-sm text-center">
+            ✅ Coach vocale italiano pronto - Premi Play per iniziare
           </p>
         </div>
       )}
@@ -695,7 +731,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
                 <option value="">Voce italiana predefinita</option>
                 {availableVoices.map((voice) => (
                   <option key={voice.name} value={voice.name}>
-                    {voice.name} {voice.lang === 'it-IT' ? '🇮🇹' : ''}
+                    {voice.name} 🇮🇹
                   </option>
                 ))}
               </select>
@@ -865,7 +901,7 @@ export const VirtualWalkingCoach = ({ onComplete }: VirtualWalkingCoachProps) =>
             </div>
           )}
           
-          {audioEnabled && hasStarted && audioInitialized && (
+          {audioEnabled && hasStarted && voiceInitialized && (
             <div className="mt-4 p-3 bg-green-500/20 rounded-lg">
               <p className="text-green-200 text-sm flex items-center justify-center gap-2">
                 <Volume2 className="w-4 h-4" />
